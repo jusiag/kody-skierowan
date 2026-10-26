@@ -1,0 +1,124 @@
+name: Sprawdzenie kodów i publikacja strony
+
+# Kiedy to się uruchamia:
+#  - codziennie rano (05:30 UTC = 07:30 latem, 06:30 zimą w Polsce),
+#  - po każdej zmianie plików w repozytorium (np. po dodaniu pliku do folderu incoming),
+#  - na żądanie: zakładka Actions -> ta nazwa -> Run workflow.
+on:
+  schedule:
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "README.md"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Sprawdź NFZ i zaktualizuj słownik
+    runs-on: ubuntu-latest
+    outputs:
+      nfz: ${{ steps.upd.outcome }}
+      resort: ${{ steps.res.outcome }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Zainstaluj czytnik plików Excel
+        run: pip install openpyxl
+
+      # Błąd tutaj (np. NFZ nie wpuszcza serwera GitHuba) nie zatrzymuje publikacji strony
+      # z dotychczasowym słownikiem. Zgłasza go na końcu osobny krok "Zgłoś problem".
+      - name: Sprawdź stronę NFZ i przekonwertuj słownik
+        id: upd
+        continue-on-error: true
+        run: python scripts/update.py
+
+      # Sprawdza w oficjalnym API Sejmu, czy rozporządzenie o kodach resortowych nie zostało zmienione.
+      # Przy zmianie kończy się błędem (e-mail od GitHuba), a strona nadal działa.
+      - name: Sprawdź przepisy o kodach resortowych
+        id: res
+        continue-on-error: true
+        run: python scripts/check_resort.py
+
+      - name: Zapisz zmiany w repozytorium
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A data incoming
+          if git diff --cached --quiet; then
+            echo "Brak zmian do zapisania."
+          else
+            git commit -m "Aktualizacja danych"
+            git push
+          fi
+
+  deploy:
+    name: Opublikuj stronę
+    needs: update
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Bierzemy najnowszy stan gałęzi, razem z commitem z poprzedniego zadania.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - uses: actions/configure-pages@v5
+
+      - name: Przygotuj pliki strony
+        run: |
+          mkdir _site
+          cp index.html app.js resort.js sw.js manifest.webmanifest icon.svg icon-192.png icon-512.png apple-touch-icon.png _site/
+          cp -r data _site/data
+          # Dane o ostatnim sprawdzeniu wpisujemy w stronę, żeby aplikacja nie musiała o nie pytać.
+          python3 - <<'PY'
+          import json
+          meta = json.load(open("data/meta.json", encoding="utf-8"))
+          html = open("_site/index.html", encoding="utf-8").read()
+          marker = '<script id="nfzmeta" type="application/json">{}</script>'
+          assert marker in html, "brak znacznika nfzmeta w index.html"
+          blob = json.dumps(meta, ensure_ascii=False).replace("</", "<\\/")
+          html = html.replace(marker, '<script id="nfzmeta" type="application/json">' + blob + '</script>', 1)
+          open("_site/index.html", "w", encoding="utf-8").write(html)
+          PY
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  report:
+    name: Zgłoś problem
+    needs: [update, deploy]
+    if: ${{ always() && (needs.update.outputs.nfz != 'success' || needs.update.outputs.resort != 'success') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Opisz problem
+        env:
+          NFZ: ${{ needs.update.outputs.nfz }}
+          RESORT: ${{ needs.update.outputs.resort }}
+        run: |
+          if [ "$NFZ" != "success" ]; then
+            echo "::error::Nie udało się sprawdzić albo pobrać słownika ICD-9 z NFZ. Strona działa na dotychczasowych kodach. Szczegóły: krok 'Sprawdź stronę NFZ i przekonwertuj słownik'. Gdy NFZ blokuje pobieranie, wgraj ręcznie plik .xlsx do folderu incoming (instrukcja w README)."
+          fi
+          if [ "$RESORT" != "success" ]; then
+            echo "::error::Przepisy o kodach resortowych mogły się zmienić albo API Sejmu nie odpowiedziało. Szczegóły: krok 'Sprawdź przepisy o kodach resortowych'. Sprawdź ISAP (Dz. U. 2012 poz. 594, Akty zmieniające) i uzupełnij tabelę resort.js."
+          fi
+          exit 1
