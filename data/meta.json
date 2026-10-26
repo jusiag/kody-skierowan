@@ -4,6 +4,15 @@
   "source": "https://www.nfz.gov.pl/gfx/nfz/userfiles/_public/dla_swiadczeniodawcy/sprawozdawczosc_elektr/slowniki/2026/icd-9_pl_cm_v_5.90.xlsx",
   "updatedAt": "2026-10-21T08:30:00Z",
   "latestSeen": "5.90",
-  "checkedAt": "2026-10-21T12:40:00Z",
-  "latestFile": "icd-9_pl_cm_v_5.90.xlsx"
+  "checkedAt": "2026-10-26T13:26:04Z",
+  "latestFile": "icd-9_pl_cm_v_5.90.xlsx",
+  "resort": {
+    "checkedAt": "2026-10-26T13:26:05Z",
+    "amendments": [
+      "DU/2017/999"
+    ],
+    "consolidated": [
+      "DU/2019/173"
+    ]
+  }
 }
