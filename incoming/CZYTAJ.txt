@@ -1,0 +1,12 @@
+Ten folder służy do awaryjnej, ręcznej aktualizacji słownika.
+
+Zwykle nic tu nie wgrywasz: automat sam sprawdza NFZ codziennie.
+Jeśli dostaniesz wiadomość, że automat nie mógł pobrać pliku z NFZ:
+
+1. Wejdź na https://www.nfz.gov.pl/dla-swiadczeniodawcy/slowniki/pliki-icd-9-pl/
+   i pobierz plik pod napisem "Aktualna wersja" (np. icd-9_pl_cm_v_5.91.xlsx).
+2. W tym repozytorium otwórz folder incoming, kliknij Add file -> Upload files
+   i przeciągnij pobrany plik. NIE zmieniaj jego nazwy, bo z niej odczytywany jest numer wersji.
+3. Kliknij Commit changes. Po około minucie nowa wersja będzie na stronie.
+
+Ten plik (CZYTAJ.txt) zostaw, bo dzięki niemu folder istnieje.

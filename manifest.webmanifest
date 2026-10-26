@@ -1,0 +1,16 @@
+{
+  "name": "Kody do skierowań",
+  "short_name": "Kody skierowań",
+  "description": "Wyszukiwarka kodów do skierowań: procedury ICD-9 PL (słownik NFZ) i kody resortowe komórek.",
+  "lang": "pl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f6f5",
+  "theme_color": "#0f6b58",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kody do skierowań</title>
+<meta name="description" content="Wyszukiwarka kodów do skierowań: kody procedur ICD-9 PL (słownik NFZ) i kody resortowe komórek (poradni, oddziałów). Działa bez internetu.">
+<meta name="theme-color" content="#f3f6f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1513" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kody do skierowań">
+<style>
+html { -webkit-text-size-adjust: 100%; }
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+
+/* Layout: one narrow column like a referral form — search field on top, result "rows" with the code set as the form field value. */
+:root {
+  --bg: #f3f6f5;
+  --surface: #ffffff;
+  --ink: #12201d;
+  --muted: #5a6b67;
+  --line: #d6e0dd;
+  --accent: #0f6b58;
+  --accent-soft: #e0efea;
+  --code-bg: #f7faf9;
+  --warn-bg: #fff4d9;
+  --warn-ink: #6b4a00;
+  --warn-line: #f0d48a;
+  --ok: #1d7a3e;
+  --err: #a1262b;
+  --font-display: ui-rounded, "Avenir Next", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-code: ui-monospace, "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1513; --surface: #16201d; --ink: #e5eeeb; --muted: #94a7a2; --line: #26332f;
+    --accent: #5cc7a8; --accent-soft: #173029; --code-bg: #111a17;
+    --warn-bg: #2e2510; --warn-ink: #f3d68a; --warn-line: #5a4716; --ok: #6ad08f; --err: #f08d8f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1513; --surface: #16201d; --ink: #e5eeeb; --muted: #94a7a2; --line: #26332f;
+  --accent: #5cc7a8; --accent-soft: #173029; --code-bg: #111a17;
+  --warn-bg: #2e2510; --warn-ink: #f3d68a; --warn-line: #5a4716; --ok: #6ad08f; --err: #f08d8f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+header.top { padding-top: 22px; display: flex; flex-direction: column; gap: 6px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(26px, 6vw, 34px); line-height: 1.1; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.sub { color: var(--muted); font-size: 14.5px; margin: 0; }
+.ver { display: inline-flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; color: var(--muted); }
+.chip { font-family: var(--font-code); font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+
+.searchbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 8px 10px; display: flex; flex-direction: column; gap: 10px; }
+.field { position: relative; }
+.field input {
+  width: 100%; font: inherit; font-size: 18px; padding: 14px 44px 14px 16px; border-radius: var(--r);
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); outline: none;
+}
+.field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.field .clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; color: var(--muted); font-size: 22px; width: 36px; height: 36px; border-radius: 8px; cursor: pointer; }
+.field .clear:focus-visible { outline: 2px solid var(--accent); }
+.catbtn { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; font-weight: 600; font-size: 16px; padding: 14px 16px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.catbtn:hover { border-color: var(--accent); }
+.catbtn:focus-visible, .nname:focus-visible, .linkbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.catbtn .cnt { margin-left: auto; color: var(--muted); font-weight: 500; font-size: 13px; }
+.chev { display: inline-block; width: 1em; flex: none; color: var(--accent); }
+[aria-expanded="true"] > .chev { transform: rotate(90deg); }
+.tree { margin-top: 10px; }
+.node { border-top: 1px solid var(--line); }
+.tree > .node:first-child { border-top: 0; }
+.nhead { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; padding: 4px 8px 4px 12px; }
+.nhead .code { min-width: 64px; font-size: 15px; padding: 4px 8px; }
+.nname { display: flex; align-items: flex-start; gap: 8px; width: 100%; text-align: left; font: inherit; color: var(--ink); background: none; border: 0; padding: 8px 4px; cursor: pointer; border-radius: 8px; }
+.nname .nt { flex: 1; min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.nname .cnt { flex: none; color: var(--muted); font-size: 13px; }
+.nkids { margin: 0 0 6px 18px; border-left: 2px solid var(--accent-soft); padding-left: 6px; display: flex; flex-direction: column; }
+.nkids > .node, .nkids > .row { border-top: 1px dashed var(--line); }
+.nkids > :first-child { border-top: 0; }
+.nkids > .row { padding-left: 4px; }
+.btn.sm { padding: 6px 14px; font-size: 14px; }
+.chk { margin: 2px 0 0; padding: 12px 14px; border-radius: var(--r); border: 1.5px solid var(--line); background: var(--surface); font-size: 15px; }
+.chk.ok { border-color: var(--ok); }
+.chk.no { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn-ink); }
+.chk b { font-weight: 600; }
+.chk a { color: var(--accent); }
+.chk.no a { color: inherit; }
+.linkbtn { font: inherit; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+
+.banner { border: 1px solid var(--warn-line); background: var(--warn-bg); color: var(--warn-ink); border-radius: var(--r); padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.banner p { margin: 0; min-width: 0; flex: 1 1 260px; }
+.banner strong { font-weight: 600; }
+
+.btn { font: inherit; font-weight: 600; font-size: 15px; padding: 10px 16px; border-radius: 8px; border: 0; background: var(--accent); color: var(--surface); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+.btn.ghost { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
+.btn:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
+.btn[disabled] { opacity: .55; cursor: default; }
+
+.section-h { font-size: 12.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin: 4px 0 -6px; display: flex; justify-content: space-between; gap: 10px; }
+.list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); overflow: hidden; }
+.row { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 14px; padding: 12px 12px 12px 14px; border-top: 1px solid var(--line); align-items: start; }
+.row:first-child { border-top: 0; }
+.code {
+  font-family: var(--font-code); font-weight: 600; font-size: 16px; color: var(--accent); background: var(--code-bg);
+  border: 1px dashed var(--line); border-radius: 6px; padding: 5px 8px; min-width: 84px; text-align: center; cursor: pointer;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.code:hover { border-color: var(--accent); border-style: solid; }
+.code:focus-visible { outline: 2px solid var(--accent); }
+.code.copied { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.name { font-weight: 500; overflow-wrap: anywhere; }
+.name mark { background: var(--accent-soft); color: inherit; border-radius: 3px; padding: 0 1px; }
+.path { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.path button { display: inline; text-align: left; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
+.path button:hover { color: var(--accent); }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 13px; }
+.meta button { font: inherit; font-size: 13px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; font-weight: 600; }
+.meta button:focus-visible { outline: 2px solid var(--accent); }
+.tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; }
+.notes { font-size: 13px; color: var(--muted); background: var(--code-bg); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.notes b { color: var(--ink); font-weight: 600; }
+.kids { grid-column: 1 / -1; margin-left: 10px; border-left: 2px solid var(--accent-soft); padding-left: 10px; display: flex; flex-direction: column; }
+.kids .row { border-top: 1px dashed var(--line); padding-inline: 4px 0; grid-template-columns: auto 1fr auto; }
+.kids .row:first-child { border-top: 0; }
+.star { border: 0; background: none; cursor: pointer; font-size: 20px; line-height: 1; color: var(--line); width: 34px; height: 34px; border-radius: 8px; }
+.star.on { color: #e0a800; }
+.star:focus-visible { outline: 2px solid var(--accent); }
+.empty { padding: 22px 16px; color: var(--muted); text-align: center; }
+.hint { font-size: 14px; color: var(--muted); }
+
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); width: min(560px, calc(100vw - 32px)); padding: 0; }
+dialog::backdrop { background: rgba(6, 14, 12, .5); }
+.dlg { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.dlg h2 { font-family: var(--font-display); font-size: 22px; margin: 0; }
+.steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 12px; }
+.steps li { padding-left: 4px; }
+.steps p { margin: 4px 0 8px; color: var(--muted); font-size: 14px; }
+.status { font-size: 14px; min-height: 1.2em; }
+.status.ok { color: var(--ok); } .status.err { color: var(--err); }
+.dlg .row-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+input[type=file] { font: inherit; font-size: 14px; max-width: 100%; }
+
+footer { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
+footer a { color: var(--accent); }
+.src { border: 1.5px solid var(--line); border-radius: var(--r); padding: 12px 14px; background: var(--surface); color: var(--ink); }
+.src p { margin: 6px 0 0; }
+.src strong { font-weight: 600; }
+#q::-webkit-search-cancel-button { display: none; }
+.rrow { grid-template-columns: auto 1fr; }
+.resban { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--accent); border-radius: var(--r); background: var(--code-bg); font-size: 14px; line-height: 1.5; }
+.resnote a, .resban a { color: var(--accent); }
+.resnote { margin-top: 10px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.grp { padding: 10px 14px; font-size: 13px; font-weight: 600; color: var(--muted); background: var(--code-bg); border-top: 1px solid var(--line); }
+.grp:first-child { border-top: 0; }
+.tobar { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; padding: 16px 12px; }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 99px; font-size: 14px; font-weight: 600; z-index: 20; }
+@media (max-width: 480px) {
+  .row { grid-template-columns: auto 1fr; }
+  .row .star { grid-column: 2; grid-row: 1; justify-self: end; margin-top: -4px; }
+  .row .body { grid-column: 1 / -1; }
+  .code { font-size: 17px; }
+}
+@media (prefers-reduced-motion: no-preference) { .code { transition: background .15s, color .15s; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Kody do skierowań</h1>
+    <p class="sub">Pełny słownik procedur NFZ. Wpisz badanie lub konsultację, dotknij kodu, żeby go skopiować.</p>
+    <div class="ver"><span class="chip" id="verChip">ICD-9 PL CM v5.90</span><span id="verInfo">10 059 kodów</span></div>
+  </header>
+
+  <div class="searchbar">
+    <div class="field">
+      <input id="q" type="search" inputmode="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="np. usg tarczycy, rtg klatki" aria-label="Szukaj kodu lub badania">
+      <button class="clear" id="clear" type="button" aria-label="Wyczyść" hidden>×</button>
+    </div>
+  </div>
+
+  <div id="favWrap" hidden>
+    <div class="section-h"><span>Twoje ulubione</span></div>
+    <div class="list" id="favList" style="margin-top:12px"></div>
+  </div>
+
+  <div id="resWrap" hidden>
+    <div class="section-h"><span id="resTitle">Wyniki</span><span id="resCount"></span></div>
+    <div class="list" id="results" style="margin-top:12px"></div>
+    <div id="resortOut"></div>
+  </div>
+
+  <p class="hint" id="loadMsg">Wczytuję słownik…</p>
+  <div id="catWrap" hidden>
+    <button class="catbtn" id="catToggle" type="button" aria-expanded="false" aria-controls="catList">
+      <span class="chev" aria-hidden="true">▸</span>
+      <span>Przeglądaj wszystkie kategorie</span>
+      <span class="cnt" id="catCount"></span>
+    </button>
+    <div class="list tree" id="catList" hidden></div>
+    <div class="tobar" id="catTop" hidden><button class="btn ghost" type="button" data-top>↑ Na górę</button></div>
+    <div id="resCat" hidden style="margin-top:14px">
+      <button class="catbtn" id="resToggle" type="button" aria-expanded="false" aria-controls="resList">
+        <span class="chev" aria-hidden="true">▸</span>
+        <span>Kody resortowe (poradnie, oddziały)</span>
+        <span class="cnt" id="resCount2"></span>
+      </button>
+      <div class="list" id="resList" hidden style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="src" id="srcBox">
+      <strong>Źródło danych</strong>
+      <p>Słownik <em>ICD-9 PL CM</em>, autor i właściciel: Narodowy Fundusz Zdrowia (<a href="https://www.nfz.gov.pl/dla-swiadczeniodawcy/slowniki/pliki-icd-9-pl/" target="_blank" rel="noopener">strona słownika na nfz.gov.pl</a>).
+      <span id="srcVer"></span></p>
+      <p id="checkInfo"></p>
+      <p><strong>Kody resortowe</strong> (specjalności komórek organizacyjnych): rozporządzenie Ministra Zdrowia z 17.05.2012 r. w sprawie systemu resortowych kodów identyfikacyjnych, załącznik nr 2, część VIII (tekst jednolity z 2019 r., Dz. U. poz. 173; <a href="https://eli.gov.pl/api/acts/DU/2019/173/text.html" target="_blank" rel="noopener">tekst</a>). <span id="resInfo"></span></p>
+      <p>Dane zostały przetworzone: plik NFZ (xlsx) przekształcono na format wyszukiwarki, bez zmiany nazw ani kodów procedur. Aplikacja jest nieoficjalna i nie pochodzi od NFZ ani Ministerstwa Zdrowia. Obowiązuje wersja ze strony NFZ.</p>
+      <p><strong>Zastrzeżenie.</strong> Aplikacja ma charakter pomocniczy i nie zastępuje oficjalnego słownika NFZ ani decyzji lekarza. Ostateczny wybór kodu na skierowaniu należy do lekarza, a autorka aplikacji nie odpowiada za skutki użycia kodów. Zauważyłeś błąd w kodzie albo w działaniu strony? <a href="https://github.com/jusiag/kody-skierowan/issues" target="_blank" rel="noopener">Zgłoś uwagę</a> (potrzebne jest konto GitHub).</p>
+    </div>
+    <span>Na skierowaniu do poradni specjalistycznej zwykle wystarcza kod 89.00 albo kod konkretnej konsultacji. Na badanie wpisuje się kod tego badania. Kod zawsze dobiera lekarz.</span>
+    <span class="hint">Ikona na telefonie: Android (Chrome) menu ⋮ → „Dodaj do ekranu głównego”. iPhone (Safari) Udostępnij → „Do ekranu początkowego”. Po pierwszym otwarciu aplikacja działa także bez internetu.</span>
+  </footer>
+</div>
+
+
+<div class="toast" id="toast" hidden></div>
+
+<script id="nfzmeta" type="application/json">{}</script>
+<script src="resort.js" defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>
