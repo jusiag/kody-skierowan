@@ -83,7 +83,7 @@ jobs:
       - name: Przygotuj pliki strony
         run: |
           mkdir _site
-          cp index.html app.js resort.js sw.js manifest.webmanifest icon.svg icon-192.png icon-512.png apple-touch-icon.png _site/
+          cp index.html app.js resort.js theme.js sw.js manifest.webmanifest icon.svg icon-192.png icon-512.png apple-touch-icon.png _site/
           cp -r data _site/data
           # Dane o ostatnim sprawdzeniu wpisujemy w stronę, żeby aplikacja nie musiała o nie pytać.
           python3 - <<'PY'
