@@ -8,6 +8,7 @@
 <meta name="description" content="Wyszukiwarka kodów do skierowań: kody procedur ICD-9 PL (słownik NFZ) i kody resortowe komórek (poradni, oddziałów). Działa bez internetu.">
 <meta name="theme-color" content="#f3f6f5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0e1513" media="(prefers-color-scheme: dark)">
+<script src="theme.js"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -66,6 +67,11 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 header.top { padding-top: 22px; display: flex; flex-direction: column; gap: 6px; }
 h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(26px, 6vw, 34px); line-height: 1.1; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
 .sub { color: var(--muted); font-size: 14.5px; margin: 0; }
+header.top { position: relative; }
+header.top h1 { padding-right: 52px; }
+.themebtn { position: absolute; top: 0; right: 0; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 20px; line-height: 1; cursor: pointer; }
+.themebtn:hover { border-color: var(--accent); }
+.themebtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ver { display: inline-flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; color: var(--muted); }
 .chip { font-family: var(--font-code); font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
 
@@ -124,6 +130,13 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(26px, 
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .code:hover { border-color: var(--accent); border-style: solid; }
+.code { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.code .ci, .code .ck { flex: none; opacity: .75; }
+.code .ck { display: none; opacity: 1; }
+.code.copied .ci { display: none; }
+.code.copied .ck { display: inline; }
+.code.nocopy { cursor: default; color: var(--muted); background: transparent; border-style: dotted; }
+.code.nocopy:hover { border-color: var(--line); border-style: dotted; }
 .code:focus-visible { outline: 2px solid var(--accent); }
 .code.copied { background: var(--accent); color: var(--surface); border-color: var(--accent); }
 .body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -165,6 +178,7 @@ footer a { color: var(--accent); }
 .src p { margin: 6px 0 0; }
 .src strong { font-weight: 600; }
 #q::-webkit-search-cancel-button { display: none; }
+.resh { margin-top: 0; }
 .rrow { grid-template-columns: auto 1fr; }
 .resban { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--accent); border-radius: var(--r); background: var(--code-bg); font-size: 14px; line-height: 1.5; }
 .resnote a, .resban a { color: var(--accent); }
@@ -186,6 +200,7 @@ footer a { color: var(--accent); }
 
 <div class="wrap">
   <header class="top">
+    <button class="themebtn" id="themeBtn" type="button" aria-label="Motyw: automatyczny" title="Motyw: automatyczny">◐</button>
     <h1>Kody do skierowań</h1>
     <p class="sub">Pełny słownik procedur NFZ. Wpisz badanie lub konsultację, dotknij kodu, żeby go skopiować.</p>
     <div class="ver"><span class="chip" id="verChip">ICD-9 PL CM v5.90</span><span id="verInfo">10 059 kodów</span></div>
@@ -204,9 +219,9 @@ footer a { color: var(--accent); }
   </div>
 
   <div id="resWrap" hidden>
+    <div id="resortOut"></div>
     <div class="section-h"><span id="resTitle">Wyniki</span><span id="resCount"></span></div>
     <div class="list" id="results" style="margin-top:12px"></div>
-    <div id="resortOut"></div>
   </div>
 
   <p class="hint" id="loadMsg">Wczytuję słownik…</p>
@@ -238,7 +253,7 @@ footer a { color: var(--accent); }
       <p>Dane zostały przetworzone: plik NFZ (xlsx) przekształcono na format wyszukiwarki, bez zmiany nazw ani kodów procedur. Aplikacja jest nieoficjalna i nie pochodzi od NFZ ani Ministerstwa Zdrowia. Obowiązuje wersja ze strony NFZ.</p>
       <p><strong>Zastrzeżenie.</strong> Aplikacja ma charakter pomocniczy i nie zastępuje oficjalnego słownika NFZ ani decyzji lekarza. Ostateczny wybór kodu na skierowaniu należy do lekarza, a autorka aplikacji nie odpowiada za skutki użycia kodów. Zauważyłeś błąd w kodzie albo w działaniu strony? <a href="https://github.com/jusiag/kody-skierowan/issues" target="_blank" rel="noopener">Zgłoś uwagę</a> (potrzebne jest konto GitHub).</p>
     </div>
-    <span>Na skierowaniu do poradni specjalistycznej zwykle wystarcza kod 89.00 albo kod konkretnej konsultacji. Na badanie wpisuje się kod tego badania. Kod zawsze dobiera lekarz.</span>
+    <span>Kopiować można tylko kody końcowe. Kod w kropkowanej ramce to kategoria ogólna: rozwiń „Kody szczegółowe” i wybierz właściwy. Kod zawsze dobiera lekarz.</span>
     <span class="hint">Ikona na telefonie: Android (Chrome) menu ⋮ → „Dodaj do ekranu głównego”. iPhone (Safari) Udostępnij → „Do ekranu początkowego”. Po pierwszym otwarciu aplikacja działa także bez internetu.</span>
   </footer>
 </div>

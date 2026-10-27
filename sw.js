@@ -2,7 +2,7 @@
  * Pliki strony: najpierw sieć, a gdy jej brak, kopia z urządzenia.
  * Słownik (folder data/) obsługuje sama strona (Cache API), więc tutaj go nie przechwytujemy. */
 const SHELL = "icd9-shell";
-const FILES = ["./", "index.html", "app.js", "resort.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
+const FILES = ["./", "index.html", "app.js", "resort.js", "theme.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

@@ -125,6 +125,13 @@
     }).join("");
   }
 
+  /* Kopiować można tylko kody końcowe. Kategoria ogólna (ma kody szczegółowe) jest tylko etykietą. */
+  const COPY_ICON = '<svg class="ci" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><svg class="ck" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+  const copyBtn = (code) => `<button class="code" type="button" data-copy="${esc(code)}" title="Kopiuj kod" aria-label="Kopiuj kod ${esc(code)}"><span class="ct">${esc(code)}</span>${COPY_ICON}</button>`;
+  const codeBtn = (e, final) => final
+    ? copyBtn(e.code)
+    : `<span class="code nocopy" title="Kategoria ogólna: wybierz kod szczegółowy">${esc(e.code)}</span>`;
+
   function rowHTML(e, toks, compact) {
     const n = DATA.notes[e.code];
     const nk = kids.get(e.code)?.length || 0;
@@ -134,7 +141,7 @@
     if (n) meta.push(`<button type="button" data-notes="${esc(e.code)}" aria-expanded="false">Uwagi NFZ</button>`);
     if (nk && !compact) meta.push(`<span class="tag">kategoria ogólna</span>`);
     return `<div class="row" data-code="${esc(e.code)}">
-      <button class="code" type="button" data-copy="${esc(e.code)}" title="Kopiuj kod">${esc(e.code)}</button>
+      ${codeBtn(e, !nk)}
       <div class="body"><span class="name">${highlight(e.name, toks)}</span>${path ? `<span class="path">${path}</span>` : ""}${meta.length ? `<span class="meta">${meta.join("")}</span>` : ""}</div>
       <button class="star${favs.has(e.code) ? " on" : ""}" type="button" data-fav="${esc(e.code)}" aria-pressed="${favs.has(e.code)}" aria-label="Ulubione">★</button>
     </div>`;
@@ -144,7 +151,7 @@
   function nodeHTML(e) {
     const n = kids.get(e.code)?.length || 0;
     if (!n) return rowHTML(e, null, true);
-    return `<div class="node"><div class="nhead"><button class="code" type="button" data-copy="${esc(e.code)}" title="Kopiuj kod">${esc(e.code)}</button><button class="nname" type="button" data-toggle="${esc(e.code)}" aria-expanded="false"><span class="chev" aria-hidden="true">▸</span><span class="nt">${esc(e.name)}</span><span class="cnt">${n}</span></button></div><div class="nkids" hidden></div></div>`;
+    return `<div class="node"><div class="nhead">${codeBtn(e, false)}<button class="nname" type="button" data-toggle="${esc(e.code)}" aria-expanded="false"><span class="chev" aria-hidden="true">▸</span><span class="nt">${esc(e.name)}</span><span class="cnt">${n}</span></button></div><div class="nkids" hidden></div></div>`;
   }
   function buildCats() {
     const top = index.filter((e) => e.lvl === 0);
@@ -158,7 +165,7 @@
   const resIdx = RES ? RES.codes.map((c) => ({ code: c[0], name: c[1], sec: RES.sections[c[2]] || "", n: norm(c[1]).split(" ") })) : [];
   const RALIAS = { fizjoter: "rehabilit", fizykoter: "rehabilit", kardio: "kardiolog" };
   function resRow(r, toks) {
-    return `<div class="row rrow"><button class="code" type="button" data-copy="${esc(r.code)}" title="Kopiuj kod">${esc(r.code)}</button><div class="body"><span class="name">${highlight(r.name, toks || null)}</span><span class="path">${esc(r.sec)}${r.derived ? " · kod wyliczony wg § 9 ust. 4 rozporządzenia: komórka dla dzieci = kod dla dorosłych (" + esc(r.derived) + ") + 1" : ""}</span></div></div>`;
+    return `<div class="row rrow">${copyBtn(r.code)}<div class="body"><span class="name">${highlight(r.name, toks || null)}</span><span class="path">${esc(r.sec)}${r.derived ? " · kod wyliczony wg § 9 ust. 4 rozporządzenia: komórka dla dzieci = kod dla dorosłych (" + esc(r.derived) + ") + 1" : ""}</span></div></div>`;
   }
   function resSearch(q) {
     if (!RES) return [];
@@ -170,16 +177,18 @@
       const base = resIdx.find((r) => r.code === String(Number(qn) - 1));
       return base ? [{ code: qn, name: base.name + " (dla dzieci)", sec: base.sec, n: [], derived: base.code }] : [];
     }
+    if (/^\d{2,3}$/.test(qn)) return resIdx.filter((r) => r.code.startsWith(qn));
     if (/\d/.test(qn)) return [];
-    const toks = qn.split(" ").filter((t) => t.length >= 2);
-    if (!toks.length) return [];
+    const toks = qn.split(" ").filter((t) => t.length >= 2 && !/^(kod|kody|resortow\w*)$/.test(t));
+    if (!toks.length) return /resort/.test(qn) ? resIdx : [];
     const stem = (t) => (t.length >= 8 ? t.slice(0, t.length - 3) : t.length >= 5 ? t.slice(0, Math.max(4, t.length - 2)) : t);
     const alt = toks.map((t) => { for (const k in RALIAS) if (t.startsWith(k)) return [stem(t), RALIAS[k]]; return [stem(t)]; });
-    return resIdx.filter((r) => alt.every((a2) => a2.some((x) => r.n.some((w) => w.startsWith(x))))).slice(0, 25);
+    return resIdx.filter((r) => alt.every((a2) => a2.some((x) => r.n.some((w) => w.startsWith(x))))).slice(0, 60);
   }
   const RES_AGE_WARN_DAYS = 3;
   const ELI_LINK = '<a href="https://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WDU20120000594" target="_blank" rel="noopener">ISAP: rozporządzenie z 2012 r. (zakładka „Akty zmieniające”)</a> · <a href="https://eli.gov.pl/api/acts/DU/2019/173/text.html" target="_blank" rel="noopener">tekst jednolity z 2019 r.</a> · <a href="https://www.nfz.gov.pl/aktualnosci/aktualnosci-centrali/rozszerzenie-listy-specjalnosci-z-rehabilitacji-w-warunkach-stacjonarnych-sprawozdawanych-w-aplikacji-ap-kolce,8682.html" target="_blank" rel="noopener">komunikat NFZ (AP-KOLCE)</a>';
   const RES_BANNER = '<div class="resban"><b>Skąd te kody.</b> Zestawienie oparte na <b>rozporządzeniu Ministra Zdrowia z 17.05.2012 r. w sprawie systemu resortowych kodów identyfikacyjnych</b>, załącznik nr 2, część VIII (tekst jednolity z 2019 r., Dz. U. poz. 173; jedyna późniejsza zmiana, z 2017 r., jest w tym tekście uwzględniona). To kody <b>komórki organizacyjnej</b> (poradni, oddziału), nie kody procedur ICD-9. Kody dla dzieci wylicza się wg § 9 ust. 4 (kod dla dorosłych + 1).</div>';
+  const RES_BANNER_SHORT = '<div class="resban"><b>Kody komórki organizacyjnej</b> (poradni, oddziału), nie kody procedur ICD-9. Źródło: rozporządzenie Ministra Zdrowia z 17.05.2012 r., załącznik nr 2, część VIII (tekst jednolity: Dz. U. 2019 poz. 173). Kod dla dzieci = kod dla dorosłych + 1 (§ 9 ust. 4).</div>';
   /* Informacja o aktualności: dane z automatu (META.resort) albo, gdy ich brak, data ręcznego sprawdzenia. */
   function resStatus() {
     const r = META && META.resort;
@@ -190,14 +199,14 @@
     return t;
   }
   const resNote = () => '<div class="resnote"><b>Aktualność.</b> ' + esc(resStatus()) + ' NFZ podaje własne rozszerzenia w komunikatach (np. AP-KOLCE). Kod zawsze dobiera i potwierdza lekarz.<br>' + ELI_LINK + '</div>';
-  function resortBlock(q, icdEmpty) {
-    const raw = q.trim();
-    const wants = /^\d{4}$/.test(raw) || icdEmpty || /poradni|oddzia|osrod|zaklad|resort|rehabilit|fizjoter|dzienn/.test(norm(raw));
-    if (!wants) return "";
-    const found = resSearch(raw);
+  let resLimit = 8;
+  function resortBlock(q) {
+    const found = resSearch(q.trim());
     if (!found.length) return "";
-    const toks = norm(raw).split(" ");
-    return `<div class="section-h" style="margin-top:18px"><span>Kody resortowe (nie procedury)</span><span>${found.length}</span></div>${RES_BANNER}<div class="list" style="margin-top:12px">${found.map((r) => resRow(r, toks)).join("")}</div>${resNote()}`;
+    const toks = norm(q).split(" ");
+    const shown = found.slice(0, resLimit);
+    const more = found.length > resLimit ? `<div class="tobar"><button class="btn ghost" type="button" data-resmore>Pokaż wszystkie kody resortowe (${found.length - resLimit} więcej)</button></div>` : "";
+    return `<div class="section-h resh"><span>Kody resortowe (poradnie, oddziały; nie procedury)</span><span>${found.length}</span></div>${RES_BANNER_SHORT}<div class="list" style="margin-top:12px">${shown.map((r) => resRow(r, toks)).join("")}</div>${more}${resNote()}`;
   }
   function buildResCat() {
     if (!RES || !$("resList")) return;
@@ -221,17 +230,18 @@
     $("resortOut").innerHTML = "";
     if (!res) return;
     const items = res.items;
-    if (!res.short) $("resortOut").innerHTML = resortBlock(q, !items.length || !!res.groups);
+    if (!res.short) $("resortOut").innerHTML = resortBlock(q);
+    const pre = $("resortOut").innerHTML ? "Procedury ICD-9: " : "";
     if (res.short) {
       $("resTitle").textContent = "Wpisz co najmniej 2 znaki";
       $("resCount").textContent = "";
       $("results").innerHTML = '<div class="empty">Jedna litera pasuje do zbyt wielu kodów. Wpisz słowo, np. „usg”, „kolano” albo początek kodu, np. „88”.</div>';
       return;
     }
-    $("resTitle").textContent = res.partial ? "Brak dokładnego kodu. Najbliższe kody ogólne" : items.length ? "Wyniki" : "Brak wyników";
+    $("resTitle").textContent = pre + (res.partial ? "Brak dokładnego kodu. Najbliższe kody ogólne" : items.length ? "Wyniki" : "Brak wyników");
     $("resCount").textContent = items.length.toLocaleString("pl-PL");
     if (res.groups) {
-      $("resTitle").textContent = "Brak kodu ze wszystkimi słowami. Kody pasujące do pojedynczych słów";
+      $("resTitle").textContent = pre + "Brak kodu ze wszystkimi słowami. Kody pasujące do pojedynczych słów";
       $("results").innerHTML = res.groups.map((g) => `<div class="grp">Pasuje do „${esc(g.label)}”</div>` + g.items.map((e) => rowHTML(e, [g.label])).join("")).join("")
         + `<div class="empty">Żaden kod w słowniku nie opisuje dokładnie „${esc(q.trim())}”. Wybierz najbliższy albo wpisz jedno słowo. Kod zawsze dobiera lekarz.</div><div class="tobar"><button class="btn ghost" type="button" data-top>↑ Na górę</button></div>`;
       return;
@@ -240,7 +250,7 @@
     $("results").innerHTML = shown.length
       ? shown.map((e) => rowHTML(e, res.toks)).join("") + `<div class="tobar">${items.length > limit ? `<button class="btn ghost" type="button" data-more>Pokaż więcej (${items.length - limit})</button>` : ""}<button class="btn ghost" type="button" data-top>↑ Na górę</button></div>`
       : /^\d{4}$/.test(q.trim())
-        ? `<div class="empty">${resSearch(q.trim()).length ? "Numeru „"+esc(q.trim())+"” nie ma wśród kodów procedur ICD-9 PL. To kod resortowy, patrz niżej." : "Numeru „"+esc(q.trim())+"” nie ma w słowniku ICD-9 PL ani w tabeli kodów resortowych. Kody procedur wyglądają np. tak: 93.11 albo 89.00. Spróbuj wpisać nazwę badania lub zabiegu."}</div>`
+        ? `<div class="empty">${resSearch(q.trim()).length ? "Numeru „"+esc(q.trim())+"” nie ma wśród kodów procedur ICD-9 PL. To kod resortowy, patrz wyżej." : "Numeru „"+esc(q.trim())+"” nie ma w słowniku ICD-9 PL ani w tabeli kodów resortowych. Kody procedur wyglądają np. tak: 93.11 albo 89.00. Spróbuj wpisać nazwę badania lub zabiegu."}</div>`
         : `<div class="empty">Nic nie znaleziono dla „${esc(q)}”. Spróbuj krótszego słowa, np. „tarczyc” albo „kolan”, lub wpisz początek kodu.</div>`;
   }
 
@@ -262,7 +272,7 @@
     let ok = false;
     try { await navigator.clipboard.writeText(code); ok = true; } catch {}
     if (!ok) {
-      const r = document.createRange(); r.selectNodeContents(btn); const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      const r = document.createRange(); r.selectNodeContents(btn.querySelector(".ct") || btn); const s = getSelection(); s.removeAllRanges(); s.addRange(r);
       try { ok = document.execCommand("copy"); } catch {}
     }
     btn.classList.add("copied"); setTimeout(() => btn.classList.remove("copied"), 900);
@@ -299,6 +309,7 @@
       return;
     }
     if ("more" in b.dataset) { limit += 60; return render(); }
+    if ("resmore" in b.dataset) { resLimit = 1000; return render(); }
     if (b.dataset.kids || b.dataset.notes) {
       const row = b.closest(".row"); const kind = b.dataset.kids ? "kids" : "notes";
       const existing = row.querySelector(":scope > ." + kind);
@@ -318,7 +329,7 @@
   });
 
   let qt;
-  $("q").addEventListener("input", () => { clearTimeout(qt); limit = 60; qt = setTimeout(render, 120); });
+  $("q").addEventListener("input", () => { clearTimeout(qt); limit = 60; resLimit = 8; qt = setTimeout(render, 120); });
   $("clear").addEventListener("click", () => { $("q").value = ""; render(); $("q").focus(); });
 
   /* ---------- dane, aktualizacje, offline ---------- */
