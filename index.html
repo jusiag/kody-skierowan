@@ -202,8 +202,7 @@ footer a { color: var(--accent); }
   <header class="top">
     <button class="themebtn" id="themeBtn" type="button" aria-label="Motyw: automatyczny" title="Motyw: automatyczny">◐</button>
     <h1>Kody do skierowań</h1>
-    <p class="sub">Pełny słownik procedur NFZ. Wpisz badanie lub konsultację, dotknij kodu, żeby go skopiować.</p>
-    <div class="ver"><span class="chip" id="verChip">ICD-9 PL CM v5.90</span><span id="verInfo">10 059 kodów</span></div>
+    <p class="sub">Kody procedur i kody poradni oraz oddziałów. Wpisz badanie, konsultację lub poradnię, dotknij kodu, żeby go skopiować.</p>
   </header>
 
   <div class="searchbar">
@@ -226,6 +225,15 @@ footer a { color: var(--accent); }
 
   <p class="hint" id="loadMsg">Wczytuję słownik…</p>
   <div id="catWrap" hidden>
+    <div id="resCat" hidden style="margin-bottom:14px">
+      <button class="catbtn" id="resToggle" type="button" aria-expanded="false" aria-controls="resList">
+        <span class="chev" aria-hidden="true">▸</span>
+        <span>Kody resortowe (poradnie, oddziały)</span>
+        <span class="cnt" id="resCount2"></span>
+      </button>
+      <div class="list" id="resList" hidden style="margin-top:12px"></div>
+      <div class="tobar" id="resTop" hidden><button class="btn ghost" type="button" data-top>↑ Na górę</button></div>
+    </div>
     <button class="catbtn" id="catToggle" type="button" aria-expanded="false" aria-controls="catList">
       <span class="chev" aria-hidden="true">▸</span>
       <span>Przeglądaj wszystkie kategorie</span>
@@ -233,14 +241,6 @@ footer a { color: var(--accent); }
     </button>
     <div class="list tree" id="catList" hidden></div>
     <div class="tobar" id="catTop" hidden><button class="btn ghost" type="button" data-top>↑ Na górę</button></div>
-    <div id="resCat" hidden style="margin-top:14px">
-      <button class="catbtn" id="resToggle" type="button" aria-expanded="false" aria-controls="resList">
-        <span class="chev" aria-hidden="true">▸</span>
-        <span>Kody resortowe (poradnie, oddziały)</span>
-        <span class="cnt" id="resCount2"></span>
-      </button>
-      <div class="list" id="resList" hidden style="margin-top:12px"></div>
-    </div>
   </div>
 
   <footer>

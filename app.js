@@ -43,8 +43,6 @@
       e.diag = /^(8[7-9]|9[0-2]|9[35])/.test(e.code) || /^[A-Z]/.test(e.code);
       index.push(e);
     }
-    $("verChip").textContent = "ICD-9 PL CM v" + data.version;
-    $("verInfo").textContent = data.codes.length.toLocaleString("pl-PL") + " kodów";
     buildCats(); buildResCat(); $("loadMsg").hidden = true;
     updateInfo(); render();
   }
@@ -293,7 +291,7 @@
     if ("back" in b.dataset) return render();
     if (b.id === "resToggle") {
       const open = b.getAttribute("aria-expanded") === "true";
-      b.setAttribute("aria-expanded", String(!open)); $("resList").hidden = open;
+      b.setAttribute("aria-expanded", String(!open)); $("resList").hidden = open; $("resTop").hidden = open;
       return;
     }
     if (b.id === "catToggle") {
@@ -352,7 +350,7 @@
      więc aplikacja nie wysyła żadnych dodatkowych zapytań o aktualność. */
   function updateInfo() {
     const cur = DATA && DATA.version;
-    $("srcVer").textContent = cur ? "Użyta wersja: " + cur + "." : "";
+    $("srcVer").textContent = cur ? "Użyta wersja: " + cur + " (" + DATA.codes.length.toLocaleString("pl-PL") + " kodów)." : "";
     if (!META || !META.checkedAt) { $("checkInfo").textContent = ""; return; }
     let t = "Baza sprawdzona: " + fmtStamp(META.checkedAt) + ".";
     if (META.latestFile) t += " Ostatnia nazwa pliku na stronie NFZ: " + META.latestFile + ".";
