@@ -55,7 +55,7 @@ Strona statyczna na GitHub Pages, bez serwera i bez zbierania danych. Raz dzienn
 - **Kody resortowe są pokazywane nad kodami ICD-9** (jest ich mniej, a lekarz często szuka właśnie poradni lub oddziału). Wyszukiwanie resortowe: po 4 cyfrach, po 2–3 pierwszych cyfrach i po nazwie; „fizjoterapia” = „rehabilitacja”.
 - **Kopiować można tylko kody końcowe** (kody resortowe i kody ICD-9 bez kodów szczegółowych). Kategorie ogólne, np. 89.00 albo 93.11, mają kropkowaną ramkę i nie kopiują się; z nich przechodzi się do „Kody szczegółowe”. W słowniku NFZ nie ma oznaczenia, że kategoria ogólna bywa też kodem końcowym, więc żadna taka nie jest kopiowalna.
 - **Przy kodzie, który można skopiować, jest ikona kopiowania (dwie karteczki)**; po dotknięciu zmienia się na ptaszek.
-- **Ekran startowy:** najpierw „Kody resortowe”, potem „Przeglądaj wszystkie kategorie”. Wersja słownika i liczba kodów są tylko w stopce (nie w nagłówku).
+- **Ekran startowy:** najpierw „Kody resortowe”, potem „Kody procedur ICD-9 (wszystkie kategorie)”. Wersja słownika i liczba kodów są tylko w stopce (nie w nagłówku).
 - **Motyw:** przycisk w prawym górnym rogu przełącza automatyczny → jasny → ciemny.
 - **Wyszukiwanie od 2 znaków**, jedna litera daje komunikat. Obsługuje skróty (usg, rtg, tk, mr, ekg…), końcówki fleksyjne, grupy wyników, gdy żaden kod nie zawiera wszystkich słów.
 

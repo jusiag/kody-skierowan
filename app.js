@@ -135,7 +135,7 @@
     const nk = kids.get(e.code)?.length || 0;
     const path = compact ? "" : e.chain.map((c) => `<button type="button" data-browse="${esc(c.code)}">${esc(c.code)} ${esc(c.name)}</button>`).join(" › ");
     const meta = [];
-    if (nk) meta.push(`<button type="button" data-kids="${esc(e.code)}" aria-expanded="false">Kody szczegółowe (${nk})</button>`);
+    if (nk) meta.push(`<button type="button" data-kids="${esc(e.code)}" aria-expanded="false">Rozwiń: Kody szczegółowe (${nk})</button>`);
     if (n) meta.push(`<button type="button" data-notes="${esc(e.code)}" aria-expanded="false">Uwagi NFZ</button>`);
     if (nk && !compact) meta.push(`<span class="tag">kategoria ogólna</span>`);
     return `<div class="row" data-code="${esc(e.code)}">
@@ -310,9 +310,11 @@
     if ("resmore" in b.dataset) { resLimit = 1000; return render(); }
     if (b.dataset.kids || b.dataset.notes) {
       const row = b.closest(".row"); const kind = b.dataset.kids ? "kids" : "notes";
-      const existing = row.querySelector(":scope > ." + kind);
-      if (existing) { existing.remove(); b.setAttribute("aria-expanded", "false"); return; }
-      b.setAttribute("aria-expanded", "true");
+      const host = kind === "kids" ? row : row.querySelector(".body");
+      const setLabel = (open) => { if (kind === "kids") b.textContent = b.textContent.replace(/^(Rozwiń|Zwiń):/, open ? "Zwiń:" : "Rozwiń:"); };
+      const existing = host.querySelector(":scope > ." + kind);
+      if (existing) { existing.remove(); b.setAttribute("aria-expanded", "false"); setLabel(false); return; }
+      b.setAttribute("aria-expanded", "true"); setLabel(true);
       const el = document.createElement("div");
       if (kind === "kids") {
         el.className = "kids";
