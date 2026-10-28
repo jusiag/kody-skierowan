@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Test API NFZ</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 16px; background: #fafafa; color: #222; }
+  h1 { font-size: 1.3rem; }
+  button { font-size: 1.1rem; padding: 14px 20px; width: 100%; border: 0; border-radius: 10px; background: #1a3a8a; color: #fff; }
+  .test { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin: 12px 0; }
+  .ok { color: #0a7a2f; font-weight: bold; }
+  .bad { color: #b00020; font-weight: bold; }
+  pre { white-space: pre-wrap; word-break: break-word; font-size: .85rem; background: #f0f0f0; padding: 8px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<h1>Test połączenia z API NFZ (strona tymczasowa)</h1>
+<p>Stuknij przycisk, poczekaj kilka sekund, potem zaznacz i skopiuj cały tekst w szarej ramce na dole.</p>
+<button id="start">Uruchom test</button>
+<div id="wyniki"></div>
+<pre id="raport">Raport pojawi się tutaj.</pre>
+
+<script>
+const API = 'https://apinfz.nfz.gov.pl/app-itl-api-pcus';
+const testy = [
+  { nazwa: '1. Słownik świadczeń (rezonans)', url: API + '/benefits?name=rezonans&limit=25&format=json' },
+  { nazwa: '2. Terminy: rezonans, mazowieckie', url: API + '/queues?province=07&benefit=rezonans&case=1&limit=25&format=json' },
+  { nazwa: '3. Terminy: rezonans, mazowieckie, miejscowość „warszawa”', url: API + '/queues?province=07&benefit=rezonans&locality=warszawa&case=1&limit=25&format=json' },
+  { nazwa: '4. Komunikat błędu: kardiolog', url: API + '/queues?province=07&benefit=poradnia%20kardiologiczna&case=1&limit=3&format=json' }
+];
+
+const czekaj = ms => new Promise(r => setTimeout(r, ms));
+
+document.getElementById('start').addEventListener('click', async () => {
+  const box = document.getElementById('wyniki');
+  const raport = [];
+  box.innerHTML = '';
+  raport.push('Strona: ' + location.href);
+  raport.push('Przeglądarka: ' + navigator.userAgent);
+  raport.push('Czas: ' + new Date().toISOString());
+
+  for (const t of testy) {
+    const div = document.createElement('div');
+    div.className = 'test';
+    div.textContent = t.nazwa + ': trwa...';
+    box.appendChild(div);
+    const start = performance.now();
+    let linia;
+    try {
+      const odp = await fetch(t.url);
+      const ms = Math.round(performance.now() - start);
+      const tekst = await odp.text();
+      let opis = '';
+      try {
+        const j = JSON.parse(tekst);
+        if (j.meta) opis = 'count=' + j.meta.count;
+        if (Array.isArray(j.data) && j.data.length) {
+          const p = j.data[0];
+          if (typeof p === 'string') opis += ', pierwsza nazwa: ' + p;
+          else if (p.attributes) {
+            const a = p.attributes;
+            opis += ', pierwsza: ' + a.provider + ' / ' + a.locality + ' / ' + (a.dates && a.dates.pcus);
+            opis += ', miejscowości: ' + [...new Set(j.data.map(x => x.attributes.locality))].join('; ');
+          }
+        }
+        if (j.errors) opis += ' BŁĄD NFZ: ' + j.errors.map(e => e['error-code'] + ' ' + e['error-result'] + ' | ' + e['error-reason']).join(' || ');
+      } catch (e) {
+        opis = 'odpowiedź nie jest JSON: ' + tekst.slice(0, 200);
+      }
+      linia = t.nazwa + ' -> DZIAŁA (HTTP ' + odp.status + ', ' + ms + ' ms) ' + opis;
+      div.innerHTML = '<span class="ok">DZIAŁA</span> ';
+    } catch (e) {
+      linia = t.nazwa + ' -> ZABLOKOWANE: ' + e.name + ': ' + e.message;
+      div.innerHTML = '<span class="bad">ZABLOKOWANE</span> ';
+    }
+    div.appendChild(document.createTextNode(linia));
+    raport.push(linia);
+    await czekaj(400);
+  }
+  document.getElementById('raport').textContent = raport.join('\n\n');
+});
+</script>
+</body>
+</html>
