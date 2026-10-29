@@ -1,6 +1,6 @@
 """Codzienna aktualizacja słownika ICD-9 PL CM.
 
-Co robi (kolejność):
+Co robi (kolejność; szczegóły bezpieczeństwa: jawny User-Agent, robots.txt, tylko domena nfz.gov.pl, limity rozmiaru, próg zmian nazw):
  1. Jeśli w folderze incoming/ leży plik .xlsx pobrany ręcznie z NFZ, konwertuje go
     (to awaryjna droga, gdy serwer NFZ nie wpuszcza automatu).
  2. W przeciwnym razie otwiera stronę słownika NFZ, odczytuje numer aktualnej wersji
@@ -20,8 +20,10 @@ import os
 import re
 import sys
 import tempfile
+import urllib.error
 import urllib.request
-from urllib.parse import urljoin
+from urllib import robotparser
+from urllib.parse import urljoin, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import convert as cv  # noqa: E402
@@ -31,23 +33,80 @@ DATA = os.path.join(ROOT, "data", "icd9.json")
 META = os.path.join(ROOT, "data", "meta.json")
 INCOMING = os.path.join(ROOT, "incoming")
 NFZ_PAGE = "https://www.nfz.gov.pl/dla-swiadczeniodawcy/slowniki/pliki-icd-9-pl/"
+# Przedstawiamy się uczciwie jako automat (z adresem kontaktowym), bez udawania przeglądarki.
+# Nagłówek HTTP musi być czystym ASCII, więc bez polskich znaków.
+BOT_NAME = "kody-skierowan-updater"
 UA = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0 Safari/537.36 kody-icd9-updater"
+    BOT_NAME + "/1.0 (+https://github.com/jusiag/kody-skierowan; "
+    "raz dziennie sprawdza wersje slownika ICD-9 PL na stronie NFZ)"
 )
+ALLOWED_HOST = "nfz.gov.pl"          # pobieramy wyłącznie z tej domeny (i jej subdomen), tylko przez https
+MAX_PAGE_BYTES = 5 * 1024 * 1024     # strona HTML i robots.txt
+MAX_FILE_BYTES = 25 * 1024 * 1024    # plik .xlsx (obecny ma ok. 1 MB)
+MAX_NAME_CHANGE = 0.20               # tyle (20%) nazw kodów może się zmienić bez ręcznego przeglądu
 
 
 def log(msg):
     print(msg, flush=True)
 
 
-def http_get(url, binary=False):
+def is_allowed_url(url):
+    """Tylko https i tylko domena NFZ (także po przekierowaniach i dla linku odczytanego ze strony)."""
+    p = urlparse(url)
+    host = (p.hostname or "").lower()
+    return p.scheme == "https" and (host == ALLOWED_HOST or host.endswith("." + ALLOWED_HOST))
+
+
+class _SafeRedirect(urllib.request.HTTPRedirectHandler):
+    """Nie pozwala, żeby serwer przekierował nas poza domenę NFZ."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not is_allowed_url(newurl):
+            raise urllib.error.URLError(f"przekierowanie poza {ALLOWED_HOST}: {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+OPENER = urllib.request.build_opener(_SafeRedirect)
+
+
+def http_get(url, binary=False, limit=MAX_PAGE_BYTES):
+    if not is_allowed_url(url):
+        raise RuntimeError(f"Adres spoza domeny {ALLOWED_HOST} (albo bez https), nie pobieram: {url}")
     req = urllib.request.Request(
         url, headers={"User-Agent": UA, "Accept": "*/*", "Accept-Language": "pl,en;q=0.8"}
     )
-    with urllib.request.urlopen(req, timeout=60) as r:
-        body = r.read()
+    with OPENER.open(req, timeout=60) as r:
+        body = r.read(limit + 1)
+    if len(body) > limit:
+        raise RuntimeError(f"Odpowiedź serwera jest większa niż {limit // (1024 * 1024)} MB, przerywam: {url}")
     return body if binary else body.decode("utf-8", "replace")
+
+
+def robots_allows(url):
+    """Czy robots.txt serwera zezwala nam (automatowi) pobrać ten adres.
+    Zasady jak w RFC 9309: brak pliku (błąd 4xx) = bez ograniczeń; błąd serwera (5xx) = nie pobieramy."""
+    p = urlparse(url)
+    robots_url = f"{p.scheme}://{p.netloc}/robots.txt"
+    try:
+        text = http_get(robots_url)
+    except urllib.error.HTTPError as e:
+        return e.code < 500
+    except (urllib.error.URLError, OSError) as e:
+        raise RuntimeError(
+            f"Nie udało się odczytać {robots_url} ({e}). Bez tego pliku nie pobieram nic automatem. "
+            "Spróbuj ponownie za kilka godzin albo wgraj ręcznie pobrany plik .xlsx do folderu incoming."
+        ) from e
+    rp = robotparser.RobotFileParser()
+    rp.parse(text.splitlines())
+    return rp.can_fetch(BOT_NAME, url)
+
+
+def require_robots(url):
+    if not robots_allows(url):
+        raise RuntimeError(
+            f"robots.txt serwera NFZ nie zezwala automatom na pobranie {url}. Nie obchodzę tego zakazu. "
+            "Pobierz plik ręcznie w przeglądarce i wgraj go do folderu incoming (instrukcja w README)."
+        )
 
 
 def read_meta():
@@ -93,13 +152,35 @@ def find_latest(html, base):
     return best
 
 
-def install(data, source, meta):
+def name_change_ratio(old_codes, new_codes):
+    """Jaka część kodów występujących w obu wersjach ma inną nazwę (0.0 – 1.0)."""
+    old = {c[0]: c[1] for c in old_codes}
+    common = [c for c in new_codes if c[0] in old]
+    if not common:
+        return 1.0
+    return sum(1 for c in common if old[c[0]] != c[1]) / len(common)
+
+
+def install(data, source, meta, manual=False):
     old = meta.get("count") or 0
     if old and data["count"] < old * 0.9:
         raise RuntimeError(
             f"Nowy słownik ma {data['count']} kodów, a obecny {old}. Różnica jest podejrzanie duża, "
             "więc niczego nie podmieniam. Sprawdź plik ręcznie."
         )
+    # Automat nie publikuje bez przeglądu słownika, w którym zmieniło się dużo nazw (plik o poprawnej
+    # strukturze, ale z podmienioną treścią). Plik wgrany ręcznie przez człowieka (manual) uznajemy za sprawdzony.
+    if not manual and os.path.exists(DATA):
+        try:
+            with open(DATA, encoding="utf-8") as f:
+                ratio = name_change_ratio(json.load(f)["codes"], data["codes"])
+        except (OSError, ValueError, KeyError):
+            ratio = 0.0
+        if ratio > MAX_NAME_CHANGE:
+            raise RuntimeError(
+                f"W nowym słowniku zmieniły się nazwy {ratio:.0%} kodów (limit {MAX_NAME_CHANGE:.0%}). "
+                "Niczego nie podmieniam. Przejrzyj plik ręcznie i, jeśli jest w porządku, wgraj go do folderu incoming."
+            )
     tmp = DATA + ".new"
     cv.write_json(data, tmp)
     os.replace(tmp, DATA)
@@ -135,7 +216,7 @@ def process_incoming(meta):
                 f"Plik {os.path.basename(path)} z folderu incoming nie nadaje się do wczytania: {e} "
                 "Usuń go z folderu incoming (otwórz plik, kliknij kosz) i wgraj poprawny."
             ) from e
-        install(data, "ręcznie dodany plik " + os.path.basename(path), meta)
+        install(data, "ręcznie dodany plik " + os.path.basename(path), meta, manual=True)
         changed = True
     else:
         log(f"Plik {os.path.basename(path)} nie jest nowszy niż obecna wersja {meta.get('version')}.")
@@ -161,11 +242,12 @@ def main():
             html = f.read()
     else:
         log(f"Otwieram stronę NFZ: {NFZ_PAGE}")
+        require_robots(NFZ_PAGE)
         try:
             html = http_get(NFZ_PAGE)
         except Exception as e:  # noqa: BLE001
             raise RuntimeError(
-                f"Nie udało się otworzyć strony NFZ ({e}). Serwer NFZ mógł zablokować automat GitHuba "
+                f"Nie udało się otworzyć strony NFZ ({e}). Serwer NFZ nie odpowiedział automatowi, odmówił "
                 "albo strona chwilowo nie działa. Spróbuj uruchomić aktualizację ponownie za kilka godzin; "
                 "jeśli problem się powtarza, wgraj ręcznie pobrany plik .xlsx do folderu incoming."
             ) from e
@@ -177,11 +259,12 @@ def main():
             path = args.xlsx_file
         else:
             log("Pobieram plik słownika...")
+            require_robots(url)
             try:
-                blob = http_get(url, binary=True)
+                blob = http_get(url, binary=True, limit=MAX_FILE_BYTES)
             except Exception as e:  # noqa: BLE001
                 raise RuntimeError(
-                    f"Nie udało się pobrać pliku {url} ({e}). NFZ mógł zablokować pobieranie przez automat; "
+                    f"Nie udało się pobrać pliku {url} ({e}). Serwer NFZ mógł odmówić automatowi; "
                     "wgraj ręcznie pobrany plik .xlsx do folderu incoming."
                 ) from e
             if blob[:2] != b"PK":

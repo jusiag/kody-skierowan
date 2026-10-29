@@ -17,6 +17,10 @@ import os
 import sys
 import urllib.request
 
+# Jawny User-Agent z adresem kontaktowym (czysty ASCII, bez udawania przeglądarki).
+UA = "kody-skierowan-check/1.0 (+https://github.com/jusiag/kody-skierowan; raz dziennie sprawdza zmiany rozporzadzenia przez API Sejmu)"
+MAX_BYTES = 2 * 1024 * 1024  # odpowiedź API to kilka KB; większa jest podejrzana
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 META = os.path.join(ROOT, "data", "meta.json")
 API = "https://api.sejm.gov.pl/eli/acts/DU/2012/594"
@@ -54,10 +58,13 @@ def main():
         with open(args.json_file, encoding="utf-8") as f:
             act = json.load(f)
     else:
-        req = urllib.request.Request(API, headers={"User-Agent": "kody-skierowan-check", "Accept": "application/json"})
+        req = urllib.request.Request(API, headers={"User-Agent": UA, "Accept": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
-                act = json.loads(r.read().decode("utf-8"))
+                body = r.read(MAX_BYTES + 1)
+            if len(body) > MAX_BYTES:
+                raise ValueError("odpowiedź większa niż 2 MB")
+            act = json.loads(body.decode("utf-8"))
         except Exception as e:  # noqa: BLE001
             raise RuntimeError(f"Nie udało się pobrać danych z API Sejmu ({e}). Spróbuj ponownie później.") from e
 
