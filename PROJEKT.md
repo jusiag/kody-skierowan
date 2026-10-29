@@ -72,3 +72,57 @@ Strona statyczna na GitHub Pages, bez serwera i bez zbierania danych. Raz dzienn
 ## 10. Kopie zapasowe
 - Repozytorium na GitHubie zawiera pełny projekt. Zalecana kopia: raz na jakiś czas **Code → Download ZIP** i zapisanie na dysku.
 - Ten plik (`PROJEKT.md`) wgrany do repozytorium przetrwa także zmianę rozmowy z Claude.
+
+## 11. Wyszukiwanie
+Cała logika wyszukiwania kodów ICD-9 jest w pliku **`search.js`** (czysty JavaScript, bez dostępu do strony, ładowany w `index.html` przed `app.js`). `app.js` tylko woła `KodySearch.search(...)` i pokazuje wynik. Kody resortowe (4 cyfry, `resSearch` w `app.js`, dane w `resort.js`) mają osobne wyszukiwanie i nie są tu opisane. Testy: `tests/search.test.js` (uruchomienie: `node tests/search.test.js`, bez żadnych bibliotek).
+
+### Jak to działa (po kolei)
+1. **Normalizacja** (`norm`): małe litery, „ł”→„l”, bez ogonków, tylko litery a–z, cyfry i kropka.
+2. **Słowa** (`tokenize`): zapytanie dzieli się na słowa (najwyżej 8 słów i 120 znaków; resztę pomijamy). Zapytanie wyglądające jak kod („88”, „93.11”, „g50”) jest dodatkowo dopasowywane po początku kodu.
+3. **Rozwinięcie słowa** (`expand`): każde słowo zamienia się na listę „początków słów”, które mają pasować:
+   - **konkretne**: skrót ze słownika `SYN` (np. „usg” → usg, ultrasonogra…), nazwa stawu („kolano” → „kolan”) albo zwykłe słowo z obciętą końcówką (≥8 liter: bez 3 ostatnich, ≥5: bez 2, min. 4 litery);
+   - **ogólne** (tylko dla stawów): „staw” oraz strona kończyny („kończyny dolnej/dolnych” dla kolana, biodra i kostki, „górnej/górnych” dla barku, łokcia, nadgarstka i dłoni).
+4. **Dopasowanie** (`matchToken`): kod pasuje, gdy któreś słowo jego nazwy ZACZYNA SIĘ od wariantu. Sprawdzamy w kolejności: konkretny w nazwie kodu, konkretny w nazwach nadrzędnych kategorii, dopiero potem ogólny. Kod musi pasować do wszystkich słów.
+5. **Ocena** (`scoreFull`, stałe w obiekcie `SCORE`, każda z opisem w pliku): +10 za słowo we własnej nazwie (+3 gdy tylko w nadrzędnych), +4 za samo wpisane słowo (nie tylko synonim), +25 gdy wszystkie słowa są we własnej nazwie, +6 kody diagnostyczne (rozdziały 87–92, 93, 95 i literowe), +2 kod końcowy, +4 gdy nazwa zaczyna się od pierwszego słowa, minus długość nazwy/18 (najwyżej 8). Te liczby są takie same jak w poprzedniej wersji.
+6. **Kolejność** (`compare`): (1) wyniki trafione konkretnie, potem wspomagane wariantem ogólnym; (2) kody z wszystkimi słowami we własnej nazwie przed kodami z trafieniem tylko w nazwach nadrzędnych; (3) punkty; (4) remis punktowy: więcej słów trafionych jako cały wyraz, potem wcześniejsze trafienie w nazwie; (5) dopiero na końcu numer kodu.
+7. Gdy żaden kod nie pasuje do wszystkich słów: **grupy** (osobna lista dla każdego słowa, po 10 kodów, najpierw konkretne), a w ostateczności wyniki **„częściowe”** (pasuje pierwsze słowo).
+
+### Zasada specyficzności (dlaczego „kolano” nie pokazuje kończyny górnej)
+Wariant ogólny może tylko UZUPEŁNIAĆ wyniki, nigdy ich wypierać. Konkretnie: (a) kod trafiony wyłącznie wariantem ogólnym jest zawsze za wszystkimi kodami trafionymi konkretnie; (b) wariant ogólny nie obejmuje kodów z przeciwną stroną ciała (np. „kończyny górnej” przy kolanie; kod z obiema stronami, np. „USG kończyn górnych lub dolnych”, jest dopuszczony); (c) nie obejmuje kodów o innym stawie lub innej części ciała (np. „USG stawów barkowych”, „Uwolnienie stawu - kręgosłup”, staw skroniowo-żuchwowy); (d) słowa „dolnej/górnej” liczą się tylko razem ze słowem „kończyn…” (inaczej łapałyby „powieki dolnej” czy „żyłę główną dolną”). Listy stawów i części ciała są na górze `search.js` (tablice `JOINTS` i `OTHER_PARTS`).
+
+### Nieregularne odmiany i słowa-wypełniacze
+- W `SYN` są wiersze łączące odmiany, których samo skracanie końcówek nie łączy: „udo/uda”, „brzuch/brzucha/brzusznej…”, „ręka/ręki” (ręka łączy się też z dłonią, bo w słowniku jest „RTG nadgarstka/dłoni”).
+- Lista `FILLER_WORDS` („jamy”, „okolicy”, „narządów”…): jeśli zapytanie NIC nie znalazło, wyszukiwanie jest powtarzane bez tych słów („usg jamy brzusznej” → „usg brzusznej”). Zapytania, które coś znajdują, nie są zmieniane.
+
+### Niedokończone słowa
+Słowo, które ma co najmniej 3 litery i jest początkiem klucza z `SYN` (np. „zdj”, „zdjeci”), działa jak ten klucz („zdjecie”) i dodatkowo jak wpisane dosłownie (żeby „kon” nadal znajdowało też „kończyna”). Dzięki temu wyniki nie „skaczą” podczas pisania: „zdj”, „zdje”, „zdjec”, „zdjeci” i „zdjecie” dają dokładnie ten sam wynik.
+
+### Jak dodać nowy skrót do SYN
+1. Otwórz `search.js`, znajdź obiekt `SYN` na górze pliku.
+2. Dopisz wiersz: `klucz: ["pierwszy", "drugi"],`. Klucz to słowo, które wpisuje użytkownik (małymi literami, bez ogonków). Wartości to POCZĄTKI słów z nazw kodów (też bez ogonków). **Pierwsza wartość to samo słowo** (dostaje premię +4), reszta to synonimy. Przykład: `ekg: ["ekg", "elektrokardiogra"]`.
+3. Początki dobieraj tak, żeby nie łapały obcych słów (np. „kola” łapało „kolagen”; zamiast tego „kolan”). Przed dodaniem sprawdź w `data/icd9.json`, jakie słowa zaczynają się tak samo.
+4. Dodaj w `tests/search.test.js` test na nowy skrót (np. `assert.ok(codes("mojklucz").includes("88.713"))`) i uruchom `node tests/search.test.js`. Test sam sprawdza też, że każdy klucz `SYN` daje wyniki i że jego początki (≥3 litery) nie dają węższego zbioru.
+5. Nowy staw: dopisz wiersz do `JOINTS` (początki słów, strona `dolna`/`gorna`, `family`).
+6. Po zmianie wgraj `search.js` (i `tests/search.test.js`) na GitHub; plik jest już na liście `sw.js` i w kroku `cp` w `update.yml`, więc nic więcej nie trzeba.
+
+### Prywatność
+Aplikacja nie używa ciasteczek i nie ma ulubionych (gwiazdek). Nie zapisuje na urządzeniu zapytań ani kodów. Jedyny zapis na urządzeniu to wybór motywu jasny/ciemny (`theme.js`, pamięć przeglądarki `localStorage`, nie ciasteczko) oraz kopia strony i słownika do pracy bez internetu (`sw.js`). Test w `tests/search.test.js` pilnuje, żeby `app.js` i `search.js` nie zaczęły zapisywać danych.
+
+### Pobieranie danych z serwisów rządowych (bezpieczeństwo)
+- Skrypty `scripts/update.py` (NFZ) i `scripts/check_resort.py` (API Sejmu) przedstawiają się uczciwie: nagłówek User-Agent z nazwą `kody-skierowan-updater` i adresem repozytorium (bez udawania przeglądarki).
+- Przed pobraniem strony i pliku `update.py` czyta `robots.txt` serwera NFZ. Jeśli zabrania automatom, nie pobiera i zgłasza błąd; wtedy pobierz plik sam w przeglądarce i wgraj do `incoming` (instrukcja w `incoming/CZYTAJ.txt`).
+- Pobieranie tylko z domeny `nfz.gov.pl` przez `https` (także po przekierowaniach i dla linku odczytanego ze strony). Limity: strona 5 MB, plik .xlsx 25 MB, odpowiedź API Sejmu 2 MB.
+- Automat nie publikuje słownika, w którym zmieniło się więcej niż 20% nazw kodów (zmiana wymaga przeglądu): przejrzyj plik i wgraj go ręcznie do `incoming`. Plik wgrany ręcznie przez Ciebie nie podlega temu progowi. Pozostałe sprawdzenia bez zmian (min. 5000 kodów, wymagane kody, spadek liczby kodów o ponad 10% blokuje).
+- Workflow ma osobne uprawnienia dla każdego zadania (zapis do repozytorium tylko w zadaniu aktualizującym dane; publikacja Pages tylko w zadaniu publikującym) oraz przypięte wersje `openpyxl` i `defusedxml`.
+- Testy skryptów: `python3 -m unittest discover -s tests -p "test_*.py" -v` (bez internetu).
+- **Warunki ponownego wykorzystywania słownika NFZ nie zostały sprawdzone** (sekcja 8). Zalecane: zapytać NFZ o zgodę na ponowne publikowanie w nieoficjalnej aplikacji.
+
+### Świadomie NIE zmienione (wymaga decyzji właścicielki)
+- Premia +6 dla kodów diagnostycznych sprawia, że przy „terapia” kody 93.xx stoją przed „94.42 Terapia rodzin”. To zachowanie pierwotne, test pilnuje, że kolejność top 20 jest taka jak wcześniej.
+- „Badanie krwi”: kody z trafieniem tylko w nadrzędnych (np. 92.058) są dopiero za kodami z trafieniem we własnej nazwie. Kod 00.9603 ma „krwi” we własnej nazwie („elementów morfotycznych krwi”), więc jego pozycja jest zgodna z zasadami.
+
+### Znane ograniczenia i pomysły (nie wdrożone; testy wypisują je jako „info”)
+- „ekg”: 89.52 „Elektrokardiogram” jest 7., bo nazwy zawierające dosłownie „ekg” (np. „Fonokardiogram z ekg”) dostają premię +4.
+- Odmiany spoza listy w `SYN` (np. „noga”) nadal nie łączą się z „kończyną dolną”. Rozwiązanie: wiersz w `SYN`.
+- Skracanie końcówek jest agresywne dla krótkich słów: „stopy” łapie „stopnia”, „krwi” łapie „krwiotwórczego”.
+- Kody końcowe nie są ściśle przed wszystkimi kategoriami ogólnymi (np. przy „fizjoterapia” kategoria 93.39 stoi przed kodem 93.88).

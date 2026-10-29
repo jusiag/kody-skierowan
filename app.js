@@ -1,118 +1,35 @@
 (() => {
   "use strict";
-  const SYN = {
-    usg: ["usg","ultrasonogra","ultradzwiek","echokardiogra"], ultrasonografia: ["usg","ultrasonogra"],
-    rtg: ["rtg","rentgen","radiogra"], rentgen: ["rtg","rentgen","radiogra"], zdjecie: ["rtg","zdjeci","radiogra"],
-    tk: ["tk","tomogra"], ct: ["tk","tomogra"], tomografia: ["tk","tomogra"],
-    mr: ["rezonans","rm"], mri: ["rezonans","rm"], rm: ["rezonans","rm"], nmr: ["rezonans","rm"], rezonans: ["rezonans","rm"],
-    ekg: ["ekg","elektrokardiogra"], echo: ["echokardiogra","echo"], eeg: ["eeg","elektroencefalogra"], emg: ["emg","elektromiogra"],
-    ktg: ["ktg","kardiotokogra"], pet: ["pet","pozytonow"], gastroskopia: ["gastroskop","ezofagogastroduodenoskop"],
-    morfologia: ["morfologi"], konsultacja: ["konsultac","porada"], porada: ["porada","konsultac"], fizjoterapia: ["fizjoterap"], rehabilitacja: ["rehabilit","fizjoterap"]
-  };
+  /* Cała logika wyszukiwania (normalizacja, skróty, dopasowanie, ranking) jest w search.js. */
+  const Search = window.KodySearch;
+  if (!Search) {
+    /* Niespójne wersje plików (np. stary index.html w pamięci urządzenia bez tagu search.js) albo search.js się nie wczytał. */
+    const m = document.getElementById("loadMsg");
+    if (m) { m.hidden = false; m.textContent = "Nie wczytał się moduł wyszukiwania (search.js). Połącz się z internetem i odśwież stronę. Jeśli to nie pomoże, zamknij i otwórz aplikację ponownie."; }
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+    return;
+  }
   const $ = (id) => document.getElementById(id);
-  const store = {
-    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
-  };
 
   let DATA = null;   // {version, codes, notes}
   let byCode = new Map(), kids = new Map(), index = [];
-  let favs = new Set(store.get("icd9-favs", []));
   let META = null;
   try { META = JSON.parse(document.getElementById("nfzmeta").textContent) || null; if (META && !META.version) META = null; } catch { META = null; }
 
-  const norm = (s) => (s || "").toLowerCase().replace(/ł/g, "l").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9.]+/g, " ").trim();
-  const words = (s) => norm(s).replace(/\./g, " ").split(" ").filter(Boolean);
+  const norm = Search.norm;
   const vparts = (v) => String(v || "0").split(/[._]/).map((n) => parseInt(n, 10) || 0);
   const vcmp = (a, b) => { const x = vparts(a), y = vparts(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return 0; };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   function load(data) {
-    DATA = data; byCode = new Map(); kids = new Map(); index = [];
-    for (const [code, name, lvl, parent, hasKids] of data.codes) {
-      const e = { code, name, lvl, parent, hasKids };
-      byCode.set(code, e);
-      if (parent) { if (!kids.has(parent)) kids.set(parent, []); kids.get(parent).push(code); }
-    }
-    for (const e of byCode.values()) {
-      const chain = []; let p = e.parent, guard = 0;
-      while (p && byCode.has(p) && guard++ < 6) { chain.unshift(byCode.get(p)); p = byCode.get(p).parent; }
-      e.chain = chain;
-      e.own = words(e.name);
-      e.ctx = chain.flatMap((c) => words(c.name));
-      e.diag = /^(8[7-9]|9[0-2]|9[35])/.test(e.code) || /^[A-Z]/.test(e.code);
-      index.push(e);
-    }
+    DATA = data;
+    ({ byCode, kids, index } = Search.buildIndex(data.codes));
     buildCats(); buildResCat(); $("loadMsg").hidden = true;
     updateInfo(); render();
   }
 
-  const JOINTS = ["kolan", "bark", "biodr", "lokc", "lokie", "nadgar", "skokow", "kostk", "dlon", "nadgarst"];
-  function alts(tok) {
-    if (SYN[tok]) return SYN[tok];
-    const stem = tok.length >= 8 ? tok.slice(0, tok.length - 3) : tok.length >= 5 ? tok.slice(0, Math.max(4, tok.length - 2)) : tok;
-    const joint = tok.length >= 4 && JOINTS.find((j) => tok.startsWith(j));
-    if (joint) return [joint, "staw", "konczyn", "miesniowo"];
-    return [stem];
-  }
-  const hit = (list, alt) => list.some((w) => alt.length < 2 ? w === alt : w.startsWith(alt));
-
-  function search(q) {
-    const raw = q.trim(); if (!raw) return null;
-    const qn = norm(raw);
-    const codeLike = /^[0-9]{1,2}(\.[0-9]*)?$|^[a-z]{1,2}[0-9]{0,3}$/.test(qn);
-    const toks = qn.replace(/\./g, qn.match(/^[0-9]/) ? "." : " ").split(" ").filter(Boolean);
-    const out = [], partial = [];
-    for (const e of index) {
-      let s = 0;
-      const cl = e.code.toLowerCase();
-      if (codeLike) {
-        if (cl === qn) s += 1000; else if (cl.startsWith(qn)) s += 500 - (cl.length - qn.length) * 10;
-      }
-      if (!s || !codeLike) {
-        let all = true, ownAll = true, t = 0, n = 0, first = false;
-        for (let i = 0; i < toks.length; i++) {
-          const a = alts(toks[i]);
-          const inOwn = a.some((x) => hit(e.own, x));
-          const inCtx = !inOwn && a.some((x) => hit(e.ctx, x));
-          if (!inOwn && !inCtx) { all = false; continue; }
-          n++; if (i === 0) first = true;
-          if (!inOwn) ownAll = false;
-          t += inOwn ? 10 : 3;
-          if (a.length > 1 && hit(e.own, a[0])) t += 4; // the word itself beats a related term
-        }
-        if (!all && toks.length > 1 && n > 0 && first) {
-          partial.push([n * 10 + (e.diag ? 6 : 0) + (e.hasKids ? 4 : 0) - Math.min(8, e.name.length / 18), e]);
-        }
-        if (all) {
-          t += ownAll ? 25 : 0;
-          if (e.diag) t += 6;
-          if (!e.hasKids) t += 2;
-          t -= Math.min(8, e.name.length / 18);
-          if (e.own[0] && alts(toks[0]).some((x) => e.own[0].startsWith(x))) t += 4;
-          s = Math.max(s, t);
-        }
-      }
-      if (s > 0) out.push([s, e]);
-    }
-    const cmp = (a, b) => b[0] - a[0] || a[1].code.localeCompare(b[1].code, "pl", { numeric: true });
-    if (!out.length && toks.length > 1) {
-      /* Żaden kod nie zawiera wszystkich słów: pokazujemy osobno kody pasujące do każdego słowa. */
-      const groups = [];
-      for (const t of toks) {
-        if (t.length < 3) continue;
-        const a = alts(t);
-        const items = index.filter((e) => a.some((x) => hit(e.own, x)))
-          .sort((x, y) => (y.diag - x.diag) || ((x.hasKids ? 1 : 0) - (y.hasKids ? 1 : 0)) || x.name.length - y.name.length)
-          .slice(0, 10);
-        if (items.length) groups.push({ label: t, items });
-      }
-      if (groups.length) return { toks, groups, items: groups.flatMap((g) => g.items) };
-    }
-    if (!out.length && partial.length) { partial.sort(cmp); return { toks, partial: true, items: partial.slice(0, 40).map((x) => x[1]) }; }
-    out.sort(cmp);
-    return { toks, items: out.map((x) => x[1]) };
-  }
+  const alts = Search.alts;
+  const search = (q) => Search.search(q, index);
 
   function highlight(name, toks) {
     if (!toks || !toks.length) return esc(name);
@@ -142,7 +59,6 @@
     return `<div class="row" data-code="${esc(e.code)}">
       ${codeBtn(e, !nk)}
       <div class="body"><span class="name">${highlight(e.name, toks)}</span>${path ? `<span class="path">${path}</span>` : ""}${meta.length ? `<span class="meta">${meta.join("")}</span>` : ""}</div>
-      <button class="star${favs.has(e.code) ? " on" : ""}" type="button" data-fav="${esc(e.code)}" aria-pressed="${favs.has(e.code)}" aria-label="Ulubione">★</button>
     </div>`;
   }
 
@@ -221,9 +137,6 @@
     $("clear").hidden = !q;
     const short = q.trim().length === 1;
     const res = short ? { toks: [], items: [], short: true } : search(q);
-    const favItems = [...favs].map((c) => byCode.get(c)).filter(Boolean);
-    $("favWrap").hidden = !!res || !favItems.length;
-    $("favList").innerHTML = favItems.map((e) => rowHTML(e, null)).join("");
     $("catWrap").hidden = !!res;
     $("resWrap").hidden = !res;
     $("resortOut").innerHTML = "";
@@ -256,7 +169,7 @@
   function browse(code) {
     const e = byCode.get(code); if (!e) return;
     $("q").value = ""; $("clear").hidden = true;
-    $("favWrap").hidden = true; $("catWrap").hidden = true; $("resWrap").hidden = false;
+    $("catWrap").hidden = true; $("resWrap").hidden = false;
     $("resortOut").innerHTML = "";
     $("resTitle").textContent = e.code + " " + e.name;
     const list = (kids.get(code) || []).map((c) => byCode.get(c));
@@ -281,12 +194,6 @@
   document.addEventListener("click", (ev) => {
     const b = ev.target.closest("button,a"); if (!b) return;
     if (b.dataset.copy) return copy(b.dataset.copy, b);
-    if (b.dataset.fav) {
-      const c = b.dataset.fav; favs.has(c) ? favs.delete(c) : favs.add(c); store.set("icd9-favs", [...favs]);
-      document.querySelectorAll(`[data-fav="${CSS.escape(c)}"]`).forEach((x) => { x.classList.toggle("on", favs.has(c)); x.setAttribute("aria-pressed", favs.has(c)); });
-      if (!$("q").value && $("resWrap").hidden) { const fi = [...favs].map((x) => byCode.get(x)).filter(Boolean); $("favWrap").hidden = !fi.length; $("favList").innerHTML = fi.map((e) => rowHTML(e, null)).join(""); }
-      return;
-    }
     if ("top" in b.dataset) return window.scrollTo({ top: 0, behavior: "smooth" });
     if (b.dataset.browse) return browse(b.dataset.browse);
     if ("back" in b.dataset) return render();
