@@ -51,7 +51,8 @@
   function alts(tok) {
     if (SYN[tok]) return SYN[tok];
     const stem = tok.length >= 8 ? tok.slice(0, tok.length - 3) : tok.length >= 5 ? tok.slice(0, Math.max(4, tok.length - 2)) : tok;
-    if (tok.length >= 4 && JOINTS.some((j) => tok.startsWith(j))) return [stem, "staw", "konczyn", "miesniowo"];
+    const joint = tok.length >= 4 && JOINTS.find((j) => tok.startsWith(j));
+    if (joint) return [joint, "staw", "konczyn", "miesniowo"];
     return [stem];
   }
   const hit = (list, alt) => list.some((w) => alt.length < 2 ? w === alt : w.startsWith(alt));
@@ -85,10 +86,10 @@
         }
         if (all) {
           t += ownAll ? 25 : 0;
-          if (e.diag) t += 6;
-          if (!e.hasKids) t += 2;
+          if (e.diag) t += 1;
+          if (!e.hasKids) t += 5;
           t -= Math.min(8, e.name.length / 18);
-          if (e.own[0] && alts(toks[0]).some((x) => e.own[0].startsWith(x))) t += 4;
+          if (e.own[0] && alts(toks[0]).some((x) => e.own[0].startsWith(x))) t += 14;
           s = Math.max(s, t);
         }
       }
