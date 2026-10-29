@@ -13,10 +13,8 @@ on:
     paths-ignore:
       - "README.md"
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
+# Domyślnie brak uprawnień; każde zadanie dostaje tylko to, czego potrzebuje (patrz niżej).
+permissions: {}
 
 concurrency:
   group: pages
@@ -26,6 +24,8 @@ jobs:
   update:
     name: Sprawdź NFZ i zaktualizuj słownik
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # zapis zaktualizowanych danych do repozytorium
     outputs:
       nfz: ${{ steps.upd.outcome }}
       resort: ${{ steps.res.outcome }}
@@ -37,7 +37,7 @@ jobs:
           python-version: "3.12"
 
       - name: Zainstaluj czytnik plików Excel
-        run: pip install openpyxl
+        run: pip install openpyxl==3.1.5 defusedxml==0.7.1   # defusedxml chroni przed złośliwym XML w pliku .xlsx
 
       # Błąd tutaj (np. NFZ nie wpuszcza serwera GitHuba) nie zatrzymuje publikacji strony
       # z dotychczasowym słownikiem. Zgłasza go na końcu osobny krok "Zgłoś problem".
@@ -69,6 +69,10 @@ jobs:
     name: Opublikuj stronę
     needs: update
     runs-on: ubuntu-latest
+    permissions:
+      contents: read    # pobranie plików strony
+      pages: write      # publikacja na GitHub Pages
+      id-token: write   # wymagane przez GitHub Pages do potwierdzenia publikacji
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -83,7 +87,7 @@ jobs:
       - name: Przygotuj pliki strony
         run: |
           mkdir _site
-          cp index.html app.js resort.js theme.js sw.js manifest.webmanifest icon.svg icon-192.png icon-512.png apple-touch-icon.png _site/
+          cp index.html app.js search.js resort.js theme.js sw.js manifest.webmanifest icon.svg icon-192.png icon-512.png apple-touch-icon.png _site/
           cp -r data _site/data
           # Dane o ostatnim sprawdzeniu wpisujemy w stronę, żeby aplikacja nie musiała o nie pytać.
           python3 - <<'PY'
@@ -109,6 +113,7 @@ jobs:
     needs: [update, deploy]
     if: ${{ always() && (needs.update.outputs.nfz != 'success' || needs.update.outputs.resort != 'success') }}
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Opisz problem
         env:
