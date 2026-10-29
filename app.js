@@ -86,10 +86,10 @@
         }
         if (all) {
           t += ownAll ? 25 : 0;
-          if (e.diag) t += 1;
-          if (!e.hasKids) t += 5;
+          if (e.diag) t += 6;
+          if (!e.hasKids) t += 2;
           t -= Math.min(8, e.name.length / 18);
-          if (e.own[0] && alts(toks[0]).some((x) => e.own[0].startsWith(x))) t += 14;
+          if (e.own[0] && alts(toks[0]).some((x) => e.own[0].startsWith(x))) t += 4;
           s = Math.max(s, t);
         }
       }
