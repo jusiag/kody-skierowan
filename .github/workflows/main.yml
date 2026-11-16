@@ -13,8 +13,10 @@ on:
     paths-ignore:
       - "README.md"
 
-# Domyślnie brak uprawnień; każde zadanie dostaje tylko to, czego potrzebuje (patrz niżej).
-permissions: {}
+permissions:
+  contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: pages
@@ -24,11 +26,10 @@ jobs:
   update:
     name: Sprawdź NFZ i zaktualizuj słownik
     runs-on: ubuntu-latest
-    permissions:
-      contents: write   # zapis zaktualizowanych danych do repozytorium
     outputs:
       nfz: ${{ steps.upd.outcome }}
       resort: ${{ steps.res.outcome }}
+      icd10: ${{ steps.icd10.outcome }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,7 +38,7 @@ jobs:
           python-version: "3.12"
 
       - name: Zainstaluj czytnik plików Excel
-        run: pip install openpyxl==3.1.5 defusedxml==0.7.1   # defusedxml chroni przed złośliwym XML w pliku .xlsx
+        run: pip install openpyxl
 
       # Błąd tutaj (np. NFZ nie wpuszcza serwera GitHuba) nie zatrzymuje publikacji strony
       # z dotychczasowym słownikiem. Zgłasza go na końcu osobny krok "Zgłoś problem".
@@ -52,6 +53,13 @@ jobs:
         id: res
         continue-on-error: true
         run: python scripts/check_resort.py
+
+      # ICD-10 (rozpoznania): wczytuje plik XML wgrany do incoming i sprawdza na dane.gov.pl, czy jest nowsza wersja.
+      # Przy nowszej wersji kończy się błędem (e-mail od GitHuba), a strona działa na dotychczasowym słowniku.
+      - name: Sprawdź słownik ICD-10 (dane.gov.pl)
+        id: icd10
+        continue-on-error: true
+        run: python scripts/update_icd10.py
 
       - name: Zapisz zmiany w repozytorium
         run: |
@@ -69,10 +77,6 @@ jobs:
     name: Opublikuj stronę
     needs: update
     runs-on: ubuntu-latest
-    permissions:
-      contents: read    # pobranie plików strony
-      pages: write      # publikacja na GitHub Pages
-      id-token: write   # wymagane przez GitHub Pages do potwierdzenia publikacji
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -111,19 +115,22 @@ jobs:
   report:
     name: Zgłoś problem
     needs: [update, deploy]
-    if: ${{ always() && (needs.update.outputs.nfz != 'success' || needs.update.outputs.resort != 'success') }}
+    if: ${{ always() && (needs.update.outputs.nfz != 'success' || needs.update.outputs.resort != 'success' || needs.update.outputs.icd10 != 'success') }}
     runs-on: ubuntu-latest
-    permissions: {}
     steps:
       - name: Opisz problem
         env:
           NFZ: ${{ needs.update.outputs.nfz }}
           RESORT: ${{ needs.update.outputs.resort }}
+          ICD10: ${{ needs.update.outputs.icd10 }}
         run: |
           if [ "$NFZ" != "success" ]; then
             echo "::error::Nie udało się sprawdzić albo pobrać słownika ICD-9 z NFZ. Strona działa na dotychczasowych kodach. Szczegóły: krok 'Sprawdź stronę NFZ i przekonwertuj słownik'. Gdy NFZ blokuje pobieranie, wgraj ręcznie plik .xlsx do folderu incoming (instrukcja w README)."
           fi
           if [ "$RESORT" != "success" ]; then
             echo "::error::Przepisy o kodach resortowych mogły się zmienić albo API Sejmu nie odpowiedziało. Szczegóły: krok 'Sprawdź przepisy o kodach resortowych'. Sprawdź ISAP (Dz. U. 2012 poz. 594, Akty zmieniające) i uzupełnij tabelę resort.js."
+          fi
+          if [ "$ICD10" != "success" ]; then
+            echo "::error::Słownik ICD-10: na dane.gov.pl może być nowsza wersja, plik w incoming był błędny albo portal nie odpowiedział. Szczegóły: krok 'Sprawdź słownik ICD-10 (dane.gov.pl)'. Instrukcja w incoming/CZYTAJ.txt."
           fi
           exit 1
