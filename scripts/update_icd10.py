@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -28,6 +29,9 @@ META = os.path.join(ROOT, "data", "meta.json")
 INCOMING = os.path.join(ROOT, "incoming")
 API = "https://api.dane.gov.pl/1.4/datasets/27/resources?per_page=100"
 DATASET_PAGE = "https://dane.gov.pl/pl/dataset/27"
+TRIES = 3              # tyle prób połączenia z portalem
+TIMEOUT = 90           # sekund na jedną próbę
+GRACE_DAYS = 7         # portal może nie odpowiadać tyle dni, zanim przyjdzie e-mail
 
 
 def log(msg):
@@ -167,17 +171,46 @@ def main():
     args = ap.parse_args()
     meta = read_meta()
     process_incoming(meta)
-    if args.json_file:
+    if args.json_file == "TIMEOUT":  # (testy) udawany brak odpowiedzi portalu
+        payload = None
+    elif args.json_file:
         with open(args.json_file, encoding="utf-8") as f:
             payload = json.load(f)
     else:
-        req = urllib.request.Request(API, headers={"User-Agent": "kody-skierowan-check", "Accept": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                payload = json.loads(r.read().decode("utf-8"))
-        except Exception as e:  # noqa: BLE001
-            raise RuntimeError(f"Nie udało się pobrać danych z API dane.gov.pl ({e}). Spróbuj ponownie później.") from e
+        payload = fetch_api()
+    if payload is None:
+        return portal_unreachable(meta)
+    meta.get("icd10", {}).pop("failingSince", None)
     check_portal(meta, payload)
+    return 0
+
+
+def fetch_api():
+    """Kilka prób z przerwą. Zwraca odpowiedź albo None, gdy portal nie odpowiada."""
+    req = urllib.request.Request(API, headers={"User-Agent": "kody-skierowan-check", "Accept": "application/json"})
+    for i in range(TRIES):
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except Exception as e:  # noqa: BLE001
+            log(f"Próba {i + 1}/{TRIES}: portal dane.gov.pl nie odpowiedział ({e}).")
+            if i + 1 < TRIES:
+                time.sleep(30)
+    return None
+
+
+def portal_unreachable(meta):
+    """Brak odpowiedzi portalu to zwykle chwilowa awaria. E-mail (błąd) dopiero, gdy trwa to dłużej niż GRACE_DAYS."""
+    m10 = ensure_meta(meta)
+    since = m10.setdefault("failingSince", now_iso())
+    write_meta(meta)
+    days = (dt.datetime.now(dt.timezone.utc) - dt.datetime.strptime(since, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)).days
+    if days >= GRACE_DAYS:
+        raise RuntimeError(
+            f"Portal dane.gov.pl nie odpowiada automatowi od {days} dni (od {since[:10]}). "
+            f"Sprawdź ręcznie na {DATASET_PAGE}, czy jest nowszy plik ICD-10 niż {m10.get('fileDate')}."
+        )
+    print(f"::warning::Portal dane.gov.pl nie odpowiedział (od {since[:10]}). Spróbuję jutro; e-mail przyjdzie dopiero po {GRACE_DAYS} dniach bez odpowiedzi.", flush=True)
     return 0
 
 
