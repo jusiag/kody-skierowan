@@ -9,4 +9,15 @@ Jeśli dostaniesz wiadomość, że automat nie mógł pobrać pliku z NFZ:
    i przeciągnij pobrany plik. NIE zmieniaj jego nazwy, bo z niej odczytywany jest numer wersji.
 3. Kliknij Commit changes. Po około minucie nowa wersja będzie na stronie.
 
+ROZPOZNANIA ICD-10 (plik .xml)
+Słownik ICD-10 zmienia się rzadko. Automat codziennie sprawdza na dane.gov.pl, czy Centrum e-Zdrowia
+opublikowało nowszy plik, i wtedy przysyła e-mail. Aktualizacja jest zawsze ręczna:
+
+1. Wejdź na https://dane.gov.pl/pl/dataset/27 i pobierz najnowszy plik XML
+   „Międzynarodowa Statystyczna Klasyfikacja Chorób i Problemów Zdrowotnych - ICD-10”.
+   (Jeśli pobierze się .zip, rozpakuj go: potrzebny jest plik .xml.)
+2. W tym repozytorium otwórz folder incoming, kliknij Add file -> Upload files
+   i przeciągnij plik .xml. NIE zmieniaj jego nazwy, bo jest w niej data wersji.
+3. Kliknij Commit changes. Po kilku minutach nowa wersja będzie na stronie, a plik zniknie z folderu.
+
 Ten plik (CZYTAJ.txt) zostaw, bo dzięki niemu folder istnieje.
