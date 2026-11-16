@@ -1,13 +1,13 @@
 {
-  "version": "5.90",
-  "count": 10059,
-  "source": "https://www.nfz.gov.pl/gfx/nfz/userfiles/_public/dla_swiadczeniodawcy/sprawozdawczosc_elektr/slowniki/2026/icd-9_pl_cm_v_5.90.xlsx",
-  "updatedAt": "2026-10-21T08:30:00Z",
-  "latestSeen": "5.90",
-  "checkedAt": "2026-11-13T06:22:28Z",
-  "latestFile": "icd-9_pl_cm_v_5.90.xlsx",
+  "version": "5.91",
+  "count": 10061,
+  "source": "ręcznie dodany plik icd-9_pl_cm_v_5.91.xlsx",
+  "updatedAt": "2026-11-16T12:22:00Z",
+  "latestSeen": "5.91",
+  "checkedAt": "2026-11-16T12:22:02Z",
+  "latestFile": "icd-9_pl_cm_v_5.91.xlsx",
   "resort": {
-    "checkedAt": "2026-11-16T11:46:46Z",
+    "checkedAt": "2026-11-16T12:22:04Z",
     "amendments": [
       "DU/2017/999"
     ],
