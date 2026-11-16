@@ -149,6 +149,10 @@ header.top h1 { padding-right: 52px; }
 .meta button { font: inherit; font-size: 13px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; font-weight: 600; }
 .meta button:focus-visible { outline: 2px solid var(--accent); }
 .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; }
+.incl { font-size: 13px; color: var(--muted); }
+.incl mark { background: var(--accent-soft); color: inherit; border-radius: 3px; padding: 0 2px; }
+.mk { font-family: var(--font-code); font-weight: 600; margin-left: 1px; }
+.sep { height: 18px; }
 .notes { font-size: 13px; color: var(--muted); background: var(--code-bg); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
 .notes b { color: var(--ink); font-weight: 600; }
 .kids { grid-column: 1 / -1; margin-left: 10px; border-left: 2px solid var(--accent-soft); padding-left: 10px; display: flex; flex-direction: column; }
@@ -171,14 +175,27 @@ input[type=file] { font: inherit; font-size: 14px; max-width: 100%; }
 
 footer { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
 footer a { color: var(--accent); }
-.src { border: 1.5px solid var(--line); border-radius: var(--r); padding: 12px 14px; background: var(--surface); color: var(--ink); }
+.src { color: var(--muted); } /* bez ramki: to informacja o źródłach, nie kolejny wynik */
+.src > strong { color: var(--ink); }
 .src p { margin: 6px 0 0; }
 .src strong { font-weight: 600; }
 #q::-webkit-search-cancel-button { display: none; }
 .resh { margin-top: 0; }
+/* Nagłówek sekcji wyników = przycisk zwijania. Napis „Zwiń/Rozwiń” i wygląd przycisku (ramka, tło) mówią, że da się go dotknąć. */
+.sechead { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; font-weight: 600; font-size: 14.5px; line-height: 1.3; padding: 11px 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; margin: 4px 0 0; }
+.sechead:hover { border-color: var(--accent); }
+.sechead:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sechead .st { flex: 1; }
+.sechead .cnt { color: var(--muted); font-weight: 500; font-size: 13px; flex: none; }
+.sechead .tgl { color: var(--accent); font-size: 13px; flex: none; min-width: 4.2em; text-align: right; }
+.sechead.static { cursor: default; border-color: transparent; background: none; padding-inline: 2px; }
+.sechead.static .tgl { display: none; }
+#resBack { margin-top: 8px; }
+#resBack:empty { display: none; }
 .rrow { grid-template-columns: auto 1fr; }
-.resban { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--accent); border-radius: var(--r); background: var(--code-bg); font-size: 14px; line-height: 1.5; }
-.resnote a, .resban a { color: var(--accent); }
+.resnote a { color: var(--accent); }
+.resnote b { color: var(--ink); font-weight: 600; }
+#resList .resnote { padding: 4px 14px 12px; }
 .resnote { margin-top: 10px; font-size: 13px; color: var(--muted); line-height: 1.5; }
 .grp { padding: 10px 14px; font-size: 13px; font-weight: 600; color: var(--muted); background: var(--code-bg); border-top: 1px solid var(--line); }
 .grp:first-child { border-top: 0; }
@@ -198,24 +215,37 @@ footer a { color: var(--accent); }
   <header class="top">
     <button class="themebtn" id="themeBtn" type="button" aria-label="Motyw: automatyczny" title="Motyw: automatyczny">◐</button>
     <h1>Kody do skierowań</h1>
-    <p class="sub">Kody procedur i kody poradni oraz oddziałów. Wpisz badanie, konsultację lub poradnię, dotknij kodu, żeby go skopiować.</p>
+    <p class="sub">Kody rozpoznań (ICD-10), procedur (ICD-9) oraz poradni i oddziałów. Wpisz chorobę, badanie, konsultację lub poradnię, dotknij kodu, żeby go skopiować.</p>
   </header>
 
   <div class="searchbar">
     <div class="field">
-      <input id="q" type="search" inputmode="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="np. usg tarczycy, rtg klatki" aria-label="Szukaj kodu lub badania">
+      <input id="q" type="search" inputmode="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="np. astma, usg tarczycy, J45" aria-label="Szukaj kodu, choroby lub badania">
       <button class="clear" id="clear" type="button" aria-label="Wyczyść" hidden>×</button>
     </div>
   </div>
 
   <div id="resWrap" hidden>
+    <div id="icd10Out"></div>
     <div id="resortOut"></div>
-    <div class="section-h"><span id="resTitle">Wyniki</span><span id="resCount"></span></div>
-    <div class="list" id="results" style="margin-top:12px"></div>
+    <button class="sechead" id="sec9head" type="button" data-sec="icd9" aria-expanded="true" aria-controls="sec9body">
+      <span class="st" id="resTitle">Wyniki</span><span class="cnt" id="resCount"></span><span class="tgl">Zwiń</span>
+    </button>
+    <div id="resBack"></div>
+    <div id="sec9body"><div class="list" id="results" style="margin-top:12px"></div><div class="resnote" id="src9note"></div></div>
   </div>
 
   <p class="hint" id="loadMsg">Wczytuję słownik…</p>
   <div id="catWrap" hidden>
+    <div id="cat10" hidden style="margin-bottom:14px">
+      <button class="catbtn" id="cat10Toggle" type="button" aria-expanded="false" aria-controls="cat10List">
+        <span class="chev" aria-hidden="true">▸</span>
+        <span>Rozpoznania ICD-10 (wszystkie rozdziały)</span>
+        <span class="cnt" id="cat10Count"></span>
+      </button>
+      <div class="list tree" id="cat10List" hidden style="margin-top:12px"></div>
+      <div class="tobar" id="cat10Top" hidden><button class="btn ghost" type="button" data-top>↑ Na górę</button></div>
+    </div>
     <div id="resCat" hidden style="margin-bottom:14px">
       <button class="catbtn" id="resToggle" type="button" aria-expanded="false" aria-controls="resList">
         <span class="chev" aria-hidden="true">▸</span>
@@ -240,8 +270,10 @@ footer a { color: var(--accent); }
       <p>Słownik <em>ICD-9 PL CM</em>, autor i właściciel: Narodowy Fundusz Zdrowia (<a href="https://www.nfz.gov.pl/dla-swiadczeniodawcy/slowniki/pliki-icd-9-pl/" target="_blank" rel="noopener">strona słownika na nfz.gov.pl</a>).
       <span id="srcVer"></span></p>
       <p id="checkInfo"></p>
+      <p><strong>Rozpoznania ICD-10</strong>: Międzynarodowa Statystyczna Klasyfikacja Chorób i Problemów Zdrowotnych, rewizja dziesiąta, polska wersja językowa. Wydawca polskiej wersji: Centrum e-Zdrowia (<a href="https://dane.gov.pl/pl/dataset/27" target="_blank" rel="noopener">plik na dane.gov.pl</a>); © World Health Organization. Podkategorie zapisane w klasyfikacji schematem (np. E11 + .9) są pokazane jako pełne kody (E11.9), a znaki † i * nie są kopiowane. Na górze listy stoją częste rozpoznania, jeśli pasują do wpisanych słów.
+      <span id="src10Ver"></span> <span id="check10Info"></span></p>
       <p><strong>Kody resortowe</strong> (specjalności komórek organizacyjnych): rozporządzenie Ministra Zdrowia z 17.05.2012 r. w sprawie systemu resortowych kodów identyfikacyjnych, załącznik nr 2, część VIII (tekst jednolity z 2019 r., Dz. U. poz. 173; <a href="https://eli.gov.pl/api/acts/DU/2019/173/text.html" target="_blank" rel="noopener">tekst</a>). <span id="resInfo"></span></p>
-      <p>Dane zostały przetworzone: plik NFZ (xlsx) przekształcono na format wyszukiwarki, bez zmiany nazw ani kodów procedur. Aplikacja jest nieoficjalna i nie pochodzi od NFZ ani Ministerstwa Zdrowia. Obowiązuje wersja ze strony NFZ.</p>
+      <p>Dane zostały przetworzone: pliki NFZ (xlsx) i Centrum e-Zdrowia (xml) przekształcono na format wyszukiwarki, bez zmiany nazw ani kodów. Aplikacja jest nieoficjalna i nie pochodzi od NFZ, Centrum e-Zdrowia ani Ministerstwa Zdrowia. Obowiązują wersje wydawców.</p>
       <p><strong>Zastrzeżenie.</strong> Aplikacja ma charakter pomocniczy i nie zastępuje oficjalnego słownika NFZ ani decyzji lekarza. Ostateczny wybór kodu na skierowaniu należy do lekarza, a autorka aplikacji nie odpowiada za skutki użycia kodów. Zauważyłeś błąd w kodzie albo w działaniu strony? <a href="https://github.com/jusiag/kody-skierowan/issues" target="_blank" rel="noopener">Zgłoś uwagę</a> (potrzebne jest konto GitHub).</p>
     </div>
     <span>Kopiować można tylko kody końcowe. Kod w kropkowanej ramce to kategoria ogólna: rozwiń „Kody szczegółowe” i wybierz właściwy. Kod zawsze dobiera lekarz.</span>

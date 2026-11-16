@@ -2,10 +2,11 @@
 
 Ten plik opisuje, co to jest, dlaczego jest zrobione tak, jak jest, jak to aktualizować i czego nie robić.
 Jeśli zaczynasz nową rozmowę z Claude, wgraj ten plik i napisz, co chcesz zmienić.
-Stan na: 27.10.2026 (po dodaniu motywu jasny/ciemny i wyników resortowych na górze).
+Stan na: 12.11.2026 (po dodaniu rozpoznań ICD-10).
 
 ## 1. Cel
 Prosta, nieoficjalna aplikacja dla lekarzy: wyszukiwarka kodów do skierowań.
+- Kody rozpoznań **ICD-10** (polska wersja klasyfikacji WHO, wydawca Centrum e-Zdrowia, aktualizacja z 31.03.2021, 12 010 kodów).
 - Kody procedur **ICD-9 PL CM** (słownik NFZ, wersja 5.90, 10 059 kodów).
 - Kody **resortowe, część VIII** (4 cyfry, specjalność komórki: poradnia, oddział) z rozporządzenia Ministra Zdrowia.
 Lekarze dostają tylko link. Nie ma kont ani logowania. Kod zawsze dobiera lekarz.
@@ -20,49 +21,102 @@ Lekarze dostają tylko link. Nie ma kont ani logowania. Kod zawsze dobiera lekar
 - Kody resortowe: rozporządzenie MZ z 17.05.2012 w sprawie systemu resortowych kodów identyfikacyjnych (Dz. U. 2012 poz. 594), załącznik nr 2, część VIII. Tekst jednolity: Dz. U. 2019 poz. 173. Jedyny akt zmieniający: Dz. U. 2017 poz. 999 (jest w tekście jednolitym).
 - § 9 ust. 4 rozporządzenia: komórka dla dzieci ma kod nieparzysty, o 1 wyższy niż kod dla dorosłych (np. 4308 → 4309). Aplikacja wylicza takie kody sama.
 - Komunikat NFZ o AP-KOLCE z 27.09.2024 wymienia kody 2302, 2304, 2306, 2314, 4300–4311 i 7400/7401. Wszystkie są w naszej tabeli (kody 2302–2314 i 4300–7400 jako pozycje rozporządzenia, nieparzyste 4301, 4303, 4307, 4309, 4311 i 7401 jako wyliczone dla dzieci wg § 9 ust. 4). Nazwy w tabeli zgadzają się z nagłówkami z komunikatu. Własnych nazw NFZ nie dopisujemy ani nie zgadujemy.
+- Słownik ICD-10: https://dane.gov.pl/pl/dataset/27 (Centrum e-Zdrowia, plik XML ok. 12 MB, np. ICD10_PL_en_covid_2021_03_31_2.xml). NFZ nie publikuje własnego słownika ICD-10. Ostatnia aktualizacja klasyfikacji: 31.03.2021 (kody U07–U12 związane z COVID-19). Prawa: © WHO; polska wersja: Centrum e-Zdrowia (dawniej CSIOZ).
+- API dane.gov.pl (sprawdzanie nowej wersji ICD-10): https://api.dane.gov.pl/1.4/datasets/27/resources
 - API Sejmu (sprawdzanie zmian przepisów): https://api.sejm.gov.pl/eli/acts/DU/2012/594
 
 ## 4. Jak to działa
-Strona statyczna na GitHub Pages, bez serwera i bez zbierania danych. Raz dziennie (ok. 7:30) automat GitHub Actions (`.github/workflows/main.yml`):
+Strona statyczna na GitHub Pages, bez serwera i bez zbierania danych. Raz dziennie (ok. 7:30) automat GitHub Actions (`.github/workflows/update.yml`):
 1. `scripts/update.py`: sprawdza stronę NFZ. Gdy jest nowsza wersja słownika, pobiera, konwertuje i podmienia `data/icd9.json`. Odmawia podmiany, gdy liczba kodów spada o ponad 10%.
 2. `scripts/check_resort.py`: pyta API Sejmu o akty zmieniające rozporządzenie. Jeśli lista różni się od znanej (`KNOWN_AMENDMENTS`, `KNOWN_CONSOLIDATED`), kończy się błędem i GitHub wysyła e-mail.
-3. Publikuje stronę, wpisując w nią datę sprawdzeń. Aplikacja pokazuje te daty i ostrzega, gdy są starsze niż 3 dni.
-4. Jeśli któryś krok się nie powiedzie, strona nadal działa na starych danych, a GitHub wysyła e-mail.
+3. `scripts/update_icd10.py`: wczytuje plik ICD-10 wgrany do `incoming/` (.xml) i sprawdza na dane.gov.pl, czy jest nowszy plik niż w aplikacji (porównuje „datę danych”). Nowszego pliku nie pobiera sam, tylko wysyła e-mail.
+4. Publikuje stronę, wpisując w nią datę sprawdzeń. Aplikacja pokazuje te daty i ostrzega, gdy są starsze niż 3 dni.
+5. Jeśli któryś krok się nie powiedzie, strona nadal działa na starych danych, a GitHub wysyła e-mail.
 
 ## 5. Pliki
 - `index.html`: strona, style, polityka bezpieczeństwa (CSP).
-- `app.js`: cała logika (wyszukiwanie, widoki, aktualność).
+- `app.js`: widoki, kody resortowe, aktualność danych.
+- `search.js`: wyszukiwanie kodów ICD-9 i ICD-10 (opis w punktach 7a i 7b).
+- `tests/`: testy wyszukiwania (`search.test.js`) i zapisana kolejność wyników (`wzorce.json`).
 - `resort.js`: tabela kodów resortowych (359 pozycji, 10 działów).
 - `theme.js`: przełącznik motywu (automatyczny / jasny / ciemny), wybór zapamiętany na urządzeniu.
 - `sw.js`: działanie bez internetu.
-- `data/icd9.json`: słownik. `data/meta.json`: wersja i daty sprawdzeń.
-- `scripts/`: `update.py`, `convert.py`, `check_resort.py`.
+- `data/icd9.json`: słownik ICD-9. `data/icd10.json`: słownik ICD-10. `data/meta.json`: wersje i daty sprawdzeń (ICD-10 w kluczu `icd10`).
+- `scripts/`: `update.py`, `convert.py` (ICD-9), `convert_icd10.py`, `update_icd10.py` (ICD-10), `check_resort.py`.
 - `incoming/`: miejsce na ręcznie pobrany .xlsx, gdy NFZ blokuje automat.
-- `.github/workflows/main.yml`, `.github/dependabot.yml`: automat i aktualizacje narzędzi.
+- `.github/workflows/update.yml`, `.github/dependabot.yml`: automat i aktualizacje narzędzi.
 
 ## 6. Co robić, gdy przyjdzie e-mail z GitHuba
 - **Problem z NFZ:** pobierz plik ze strony NFZ i wgraj go (bez zmiany nazwy) do folderu `incoming`.
+- **ICD-10 (nowsza wersja na dane.gov.pl albo błąd portalu):** pobierz najnowszy plik XML z https://dane.gov.pl/pl/dataset/27 i wgraj go (bez zmiany nazwy) do `incoming`. Jeśli e-mail mówi, że portal „zmienił budowę”, automat nie umie odczytać odpowiedzi API: sprawdź ręcznie, czy jest nowy plik, i zgłoś to do poprawy skryptu.
 - **Zmiana przepisów (kody resortowe):** w ISAP (Dz. U. 2012 poz. 594, zakładka „Akty zmieniające”) sprawdź nowy akt. Wprowadź zmiany w `resort.js` i dopisz akt do `KNOWN_AMENDMENTS` w `scripts/check_resort.py`. Daj też nową datę w opisie aplikacji.
 - **Brak e-maili, ale aplikacja ostrzega o starym sprawdzeniu:** w Actions uruchom ręcznie „Run workflow”.
 
 ## 7. Ważne decyzje i dlaczego
 - **Nazwa „Kody do skierowań”**, bo aplikacja zawiera nie tylko ICD-9.
-- **Źródło NFZ i zastrzeżenie** są wyraźnie na dole strony; kody resortowe mają własną ramkę ze źródłem. Wynika z tego, że to narzędzie pomocnicze, nie oficjalne.
+- **Źródła bez ramek** (od 12.11.2026): każda sekcja wyników (ICD-10, Kody resortowe, Procedury ICD-9) ma pod wynikami krótką notkę „Źródło.” drobnym, szarym tekstem; kody resortowe mają w niej też „Aktualność” i linki do ISAP. Pełne źródła i zastrzeżenie są na dole strony, również bez ramki, żeby nie wyglądały jak wynik. Wynika z tego, że to narzędzie pomocnicze, nie oficjalne.
 - **Dane na GitHubie są przetworzone, nazw ani kodów nie zmieniamy.**
 - **Brak przycisku „sprawdź” w aplikacji.** Aplikacja nie wysyła zbędnych zapytań, sprawdza raz dziennie automat.
 - **Brak zewnętrznych serwerów** (czcionki systemowe, polityka CSP `default-src 'self'`).
 - **Tabela resortowa jest aktualizowana ręcznie.** Automat tylko alarmuje, bo zmianę prawa trzeba wprowadzić świadomie.
 - **Kody resortowe są pokazywane nad kodami ICD-9** (jest ich mniej, a lekarz często szuka właśnie poradni lub oddziału). Wyszukiwanie resortowe: po 4 cyfrach, po 2–3 pierwszych cyfrach i po nazwie; „fizjoterapia” = „rehabilitacja”.
 - **Kopiować można tylko kody końcowe** (kody resortowe i kody ICD-9 bez kodów szczegółowych). Kategorie ogólne, np. 89.00 albo 93.11, mają kropkowaną ramkę i nie kopiują się; z nich przechodzi się do „Kody szczegółowe”. W słowniku NFZ nie ma oznaczenia, że kategoria ogólna bywa też kodem końcowym, więc żadna taka nie jest kopiowalna.
+- **Bez ulubionych (gwiazdek)** (od 29.10.2026). Lista ulubionych wymagała zapisu w pamięci przeglądarki, a ta nie zawsze działa (tryb prywatny, wersja testowa w Claude, inne urządzenie) i lista znikała. Aplikacja nie zapisuje kodów wybranych przez lekarza. W pamięci urządzenia zostaje tylko wybór motywu (jasny/ciemny) i kopia słownika do pracy bez internetu.
 - **Przy kodzie, który można skopiować, jest ikona kopiowania (dwie karteczki)**; po dotknięciu zmienia się na ptaszek.
-- **Ekran startowy:** najpierw „Kody resortowe”, potem „Kody procedur ICD-9 (wszystkie kategorie)”. Wersja słownika i liczba kodów są tylko w stopce (nie w nagłówku).
+- **Ekran startowy:** najpierw „Rozpoznania ICD-10 (wszystkie rozdziały)”, potem „Kody resortowe”, potem „Kody procedur ICD-9 (wszystkie kategorie)”.
+- **Jedno pole wyszukiwania, trzy sekcje** (od 12.11.2026): Rozpoznania ICD-10 → Kody resortowe → Procedury ICD-9. Sekcja ICD-10 pokazuje się tylko, gdy rozpoznanie pasuje do wszystkich wpisanych słów (inaczej przy „usg tarczycy” nad procedurą 88.713 stałyby przypadkowe rozpoznania). Widać 5 rozpoznań, resztę po „Pokaż więcej”.
+- **Zwijanie sekcji wyników** (od 12.11.2026): nagłówek każdej sekcji (ICD-10, Kody resortowe, Procedury ICD-9) jest przyciskem z napisem „Zwiń” / „Rozwiń” i liczbą wyników (bez strzałki: napis i wygląd przycisku wystarczą). Domyślnie wszystko rozwinięte. Zwinięta sekcja zostaje zwinięta przy kolejnych hasłach do zamknięcia strony; nic nie jest zapisywane w telefonie. Gdy wyniki są tylko w ICD-9, jej nagłówek jest zwykłym napisem (nie da się zwinąć jedynej sekcji). W przeglądaniu kategorii „Wróć do listy kategorii” jest pod nagłówkiem. Wersja słownika i liczba kodów są tylko w stopce (nie w nagłówku).
 - **Motyw:** przycisk w prawym górnym rogu przełącza automatyczny → jasny → ciemny.
 - **Wyszukiwanie od 2 znaków**, jedna litera daje komunikat. Obsługuje skróty (usg, rtg, tk, mr, ekg…), końcówki fleksyjne, grupy wyników, gdy żaden kod nie zawiera wszystkich słów.
+
+## 7a. Wyszukiwanie (plik `search.js`, od 29.10.2026)
+Cała logika szukania kodów ICD-9 jest w `search.js`. Plik nie dotyka strony, więc da się go sprawdzić testami bez przeglądarki. `app.js` tylko wyświetla wyniki. Kody resortowe (`resSearch` w `app.js`, `resort.js`) są osobno i tego nie dotyczy.
+
+**Jak to działa, krok po kroku:**
+1. **Normalizacja:** małe litery, „ł” → „l”, bez ogonków, tylko litery, cyfry i kropka.
+2. **Słowa:** zapytanie dzielone na słowa (najwyżej 12). Zapytanie zaczynające się od cyfry zachowuje kropki (to numer kodu).
+3. **Warianty słowa:**
+   - słowo ze słownika skrótów `SYN` (usg, rtg, tk, mr, ekg, zdjecie, konsultacja…) → jego warianty;
+   - **niedokończone słowo** (min. 3 litery), które jest początkiem klucza `SYN`, działa jak ten klucz („zdje”, „zdjec”, „zdjeci” = „zdjecie”), więc wyniki nie skaczą przy pisaniu;
+   - staw (kolano, biodro, kostka, staw skokowy, bark, łokieć, nadgarstek, dłoń) → wariant **konkretny** (np. „kolan”) i warianty **ogólne** („staw”, „kończyna dolna/górna” jako para słów, „mięśniowo”);
+   - pozostałe słowa: skrócona końcówka (≥ 8 liter: bez 3 ostatnich, ≥ 5: bez 2, min. 4 litery).
+4. **Trafienie:** któreś słowo nazwy zaczyna się od wariantu. Liczy się nazwa kodu albo nazwy kategorii nadrzędnych.
+5. **Ocena:** punkty jak dotąd (stałe z opisem są na górze `search.js`). Kod z oceną ≤ 0 nie jest pokazywany (tak było i wcześniej).
+6. **Kolejność:**
+   1) najpierw kody trafione **konkretnie**, dopiero pod nimi kody trafione tylko wariantem ogólnym (np. „staw”);
+   2) potem więcej punktów;
+   3) przy remisie: trafione słowo wcześniej w nazwie, potem krótsza nazwa, potem numer kodu. Przy szukaniu po numerze kodu remis rozstrzyga od razu numer.
+- **Wariant ogólny nigdy nie łapie** kodu, który nazywa inny staw (np. bark dla „kolano”), rękę/stopę po drugiej stronie albo drugą kończynę (np. „kończyny górnej” dla „kolano”). Wyjątek: kod wymienia obie kończyny, np. 88.793 „USG kończyn górnych lub dolnych”.
+- Bez zmian: minimum 2 znaki (1 znak = komunikat), szukanie po początku numeru kodu („88”, „93.11”, „g50”), grupy wyników dla każdego słowa (gdy żaden kod nie ma wszystkich słów), wyniki częściowe, podświetlanie.
+- Przełącznik `LEAF_FIRST` (domyślnie wyłączony): po włączeniu kody końcowe zawsze stoją przed kategoriami ogólnymi. Zmienia top 10 w ok. 27% zapytań, więc wymaga świadomej decyzji.
+
+**Jak dodać nowy skrót:** w `search.js` w `SYN` dopisz np. `dexa: ["densytometr"],` (klucz i warianty małymi literami, bez polskich znaków; pierwszy wariant to termin główny). Potem uruchom testy.
+
+**Testy** (na komputerze z Node.js, w głównym folderze projektu): `node tests/search.test.js`. Sprawdzają przykłady z błędów (kolano, bark, łokieć, zdjęcie…), regułę „inny staw / druga kończyna” dla wszystkich stawów, odporność na dziwne zapytania i szybkość. Plik `tests/wzorce.json` zapamiętuje kolejność top 10 dla ok. 40 typowych zapytań. Jeśli zmiana kodu przestawi wyniki, test pokaże „było / jest”. Gdy zmiana jest zamierzona, zapisz nową kolejność: `node tests/search.test.js --zapisz-wzorce`.
+
+## 7b. Rozpoznania ICD-10 (od 12.11.2026)
+**Dane** (`scripts/convert_icd10.py`, kodów i nazw nie zmieniamy):
+- rozdziały (np. J00–J99) i bloki (J40–J47) to kategorie ogólne; kategoria (J45) i podkategoria (J45.0) to kody;
+- 117 kategorii (np. E10–E14 cukrzyca, F10–F19, K25–K28, N00–N07, O03–O06, V01–V89) ma w pliku podkategorie zapisane tylko schematem („.0 Ze śpiączką … .9 Bez powikłań”). Pełne kody składamy jak w Tomie I: E11 + .9 = **E11.9**, nazwa „Cukrzyca insulinoniezależna – Bez powikłań” (989 takich kodów);
+- znaki † (przyczyna) i * (objaw) są pokazywane przy kodzie, ale **nie są kopiowane** (nie należą do kodu);
+- określenia włączone („Obejmuje”, np. pod E06.3 „Zapalenie tarczycy Hashimoto”) są przeszukiwane i pokazywane pod nazwą, gdy to one pasują;
+- nieobowiązkowy 5. znak (umiejscowienie w rozdziale M, złamanie zamknięte/otwarte w S/T) jest uwagą przy kategorii, nie osobnym kodem;
+- bloki jednokodowe (B99, F99, C50, C97) występują raz, jako kategoria.
+**Wyszukiwanie** (ten sam silnik co ICD-9, `search.js`, punkt 10; indeks ICD-9 budowany jest bez zmian, co pilnują testy):
+- kod: „J45”, „j45.0”, „J450”, „e119” (bez kropki też działa);
+- trafienie w określeniu włączonym liczy się prawie jak w nazwie (8 pkt zamiast 10);
+- `PHRASES10`: „cukrzyca typu 2 / t2 / DM2” → insulinoniezależna (E11), „typu 1” → insulinozależna (E10);
+- `SYN10`: skróty z gabinetu (POChP, AZS, RZS, ZUM, IBS, GERD, ChNS, NT, AF, SM, ADHD, angina, dyskopatia, infekcja, alergia, nerwica…);
+- `COMMON10`: lista ok. 70 częstych rozpoznań POZ/AOS (np. I10, E11, J06, J45, M54, N39, R10, Z00). Gdy pasują do wpisanych słów **w samej nazwie kodu**, stoją na górze. To ułatwienie, nie zalecenie; listę można zmienić albo opróżnić (wtedy kolejność wynika tylko z punktów). Lista ułożona przez Claude: **warto, żeby przejrzał ją lekarz**.
+**Jak dodać skrót ICD-10:** w `search.js` w `SYN10` dopisz np. `pzp: ["przewlekl"]`; frazę wielowyrazową dopisz do `PHRASES10`. Potem `node tests/search.test.js`.
 
 ## 8. Czego nie wiemy / nie sprawdzono
 - Czy kod ICD-9 jest wymagany na każdym skierowaniu. To zależy od rodzaju skierowania i placówki.
 - Własnych kodów NFZ z komunikatów (np. AP-KOLCE) poza tymi, które wynikają z rozporządzenia.
 - Czy NFZ zmieni układ strony ze słownikiem. Wtedy `update.py` zgłosi błąd i trzeba wgrać plik ręcznie.
+- Dokładna budowa odpowiedzi API dane.gov.pl nie była sprawdzona na żywo (z miejsca, gdzie powstawał skrypt, portal był niedostępny). Skrypt szuka zasobu XML z „ICD-10” w tytule i jego „daty danych”. Jeśli pierwsze uruchomienie automatu zgłosi, że „portal zmienił budowę”, trzeba poprawić `walk_resources`/`resource_date` w `scripts/update_icd10.py`.
+- Czy NFZ/P1 przyjmuje kody ICD-10 3-znakowe, gdy kategoria ma podkategorie. Aplikacja pozwala kopiować tylko kody końcowe (jak w ICD-9), więc np. J45 trzeba rozwinąć do J45.0–J45.9.
+- Lista częstych rozpoznań (`COMMON10`) nie pochodzi z danych NFZ o częstości, tylko z wiedzy ogólnej. Warto ją skonsultować z lekarzami.
 
 ## 9. Bezpieczeństwo (zrobione i do zrobienia)
 - Zrobione: 2FA na koncie GitHub, czcionki lokalne, CSP, brak zewnętrznych hostów.
@@ -72,57 +126,3 @@ Strona statyczna na GitHub Pages, bez serwera i bez zbierania danych. Raz dzienn
 ## 10. Kopie zapasowe
 - Repozytorium na GitHubie zawiera pełny projekt. Zalecana kopia: raz na jakiś czas **Code → Download ZIP** i zapisanie na dysku.
 - Ten plik (`PROJEKT.md`) wgrany do repozytorium przetrwa także zmianę rozmowy z Claude.
-
-## 11. Wyszukiwanie
-Cała logika wyszukiwania kodów ICD-9 jest w pliku **`search.js`** (czysty JavaScript, bez dostępu do strony, ładowany w `index.html` przed `app.js`). `app.js` tylko woła `KodySearch.search(...)` i pokazuje wynik. Kody resortowe (4 cyfry, `resSearch` w `app.js`, dane w `resort.js`) mają osobne wyszukiwanie i nie są tu opisane. Testy: `tests/search.test.js` (uruchomienie: `node tests/search.test.js`, bez żadnych bibliotek).
-
-### Jak to działa (po kolei)
-1. **Normalizacja** (`norm`): małe litery, „ł”→„l”, bez ogonków, tylko litery a–z, cyfry i kropka.
-2. **Słowa** (`tokenize`): zapytanie dzieli się na słowa (najwyżej 8 słów i 120 znaków; resztę pomijamy). Zapytanie wyglądające jak kod („88”, „93.11”, „g50”) jest dodatkowo dopasowywane po początku kodu.
-3. **Rozwinięcie słowa** (`expand`): każde słowo zamienia się na listę „początków słów”, które mają pasować:
-   - **konkretne**: skrót ze słownika `SYN` (np. „usg” → usg, ultrasonogra…), nazwa stawu („kolano” → „kolan”) albo zwykłe słowo z obciętą końcówką (≥8 liter: bez 3 ostatnich, ≥5: bez 2, min. 4 litery);
-   - **ogólne** (tylko dla stawów): „staw” oraz strona kończyny („kończyny dolnej/dolnych” dla kolana, biodra i kostki, „górnej/górnych” dla barku, łokcia, nadgarstka i dłoni).
-4. **Dopasowanie** (`matchToken`): kod pasuje, gdy któreś słowo jego nazwy ZACZYNA SIĘ od wariantu. Sprawdzamy w kolejności: konkretny w nazwie kodu, konkretny w nazwach nadrzędnych kategorii, dopiero potem ogólny. Kod musi pasować do wszystkich słów.
-5. **Ocena** (`scoreFull`, stałe w obiekcie `SCORE`, każda z opisem w pliku): +10 za słowo we własnej nazwie (+3 gdy tylko w nadrzędnych), +4 za samo wpisane słowo (nie tylko synonim), +25 gdy wszystkie słowa są we własnej nazwie, +6 kody diagnostyczne (rozdziały 87–92, 93, 95 i literowe), +2 kod końcowy, +4 gdy nazwa zaczyna się od pierwszego słowa, minus długość nazwy/18 (najwyżej 8). Te liczby są takie same jak w poprzedniej wersji.
-6. **Kolejność** (`compare`): (1) wyniki trafione konkretnie, potem wspomagane wariantem ogólnym; (2) kody z wszystkimi słowami we własnej nazwie przed kodami z trafieniem tylko w nazwach nadrzędnych; (3) punkty; (4) remis punktowy: więcej słów trafionych jako cały wyraz, potem wcześniejsze trafienie w nazwie; (5) dopiero na końcu numer kodu.
-7. Gdy żaden kod nie pasuje do wszystkich słów: **grupy** (osobna lista dla każdego słowa, po 10 kodów, najpierw konkretne), a w ostateczności wyniki **„częściowe”** (pasuje pierwsze słowo).
-
-### Zasada specyficzności (dlaczego „kolano” nie pokazuje kończyny górnej)
-Wariant ogólny może tylko UZUPEŁNIAĆ wyniki, nigdy ich wypierać. Konkretnie: (a) kod trafiony wyłącznie wariantem ogólnym jest zawsze za wszystkimi kodami trafionymi konkretnie; (b) wariant ogólny nie obejmuje kodów z przeciwną stroną ciała (np. „kończyny górnej” przy kolanie; kod z obiema stronami, np. „USG kończyn górnych lub dolnych”, jest dopuszczony); (c) nie obejmuje kodów o innym stawie lub innej części ciała (np. „USG stawów barkowych”, „Uwolnienie stawu - kręgosłup”, staw skroniowo-żuchwowy); (d) słowa „dolnej/górnej” liczą się tylko razem ze słowem „kończyn…” (inaczej łapałyby „powieki dolnej” czy „żyłę główną dolną”). Listy stawów i części ciała są na górze `search.js` (tablice `JOINTS` i `OTHER_PARTS`).
-
-### Nieregularne odmiany i słowa-wypełniacze
-- W `SYN` są wiersze łączące odmiany, których samo skracanie końcówek nie łączy: „udo/uda”, „brzuch/brzucha/brzusznej…”, „ręka/ręki” (ręka łączy się też z dłonią, bo w słowniku jest „RTG nadgarstka/dłoni”).
-- Lista `FILLER_WORDS` („jamy”, „okolicy”, „narządów”…): jeśli zapytanie NIC nie znalazło, wyszukiwanie jest powtarzane bez tych słów („usg jamy brzusznej” → „usg brzusznej”). Zapytania, które coś znajdują, nie są zmieniane.
-
-### Niedokończone słowa
-Słowo, które ma co najmniej 3 litery i jest początkiem klucza z `SYN` (np. „zdj”, „zdjeci”), działa jak ten klucz („zdjecie”) i dodatkowo jak wpisane dosłownie (żeby „kon” nadal znajdowało też „kończyna”). Dzięki temu wyniki nie „skaczą” podczas pisania: „zdj”, „zdje”, „zdjec”, „zdjeci” i „zdjecie” dają dokładnie ten sam wynik.
-
-### Jak dodać nowy skrót do SYN
-1. Otwórz `search.js`, znajdź obiekt `SYN` na górze pliku.
-2. Dopisz wiersz: `klucz: ["pierwszy", "drugi"],`. Klucz to słowo, które wpisuje użytkownik (małymi literami, bez ogonków). Wartości to POCZĄTKI słów z nazw kodów (też bez ogonków). **Pierwsza wartość to samo słowo** (dostaje premię +4), reszta to synonimy. Przykład: `ekg: ["ekg", "elektrokardiogra"]`.
-3. Początki dobieraj tak, żeby nie łapały obcych słów (np. „kola” łapało „kolagen”; zamiast tego „kolan”). Przed dodaniem sprawdź w `data/icd9.json`, jakie słowa zaczynają się tak samo.
-4. Dodaj w `tests/search.test.js` test na nowy skrót (np. `assert.ok(codes("mojklucz").includes("88.713"))`) i uruchom `node tests/search.test.js`. Test sam sprawdza też, że każdy klucz `SYN` daje wyniki i że jego początki (≥3 litery) nie dają węższego zbioru.
-5. Nowy staw: dopisz wiersz do `JOINTS` (początki słów, strona `dolna`/`gorna`, `family`).
-6. Po zmianie wgraj `search.js` (i `tests/search.test.js`) na GitHub; plik jest już na liście `sw.js` i w kroku `cp` w `update.yml`, więc nic więcej nie trzeba.
-
-### Prywatność
-Aplikacja nie używa ciasteczek i nie ma ulubionych (gwiazdek). Nie zapisuje na urządzeniu zapytań ani kodów. Jedyny zapis na urządzeniu to wybór motywu jasny/ciemny (`theme.js`, pamięć przeglądarki `localStorage`, nie ciasteczko) oraz kopia strony i słownika do pracy bez internetu (`sw.js`). Test w `tests/search.test.js` pilnuje, żeby `app.js` i `search.js` nie zaczęły zapisywać danych.
-
-### Pobieranie danych z serwisów rządowych (bezpieczeństwo)
-- Skrypty `scripts/update.py` (NFZ) i `scripts/check_resort.py` (API Sejmu) przedstawiają się uczciwie: nagłówek User-Agent z nazwą `kody-skierowan-updater` i adresem repozytorium (bez udawania przeglądarki).
-- Przed pobraniem strony i pliku `update.py` czyta `robots.txt` serwera NFZ. Jeśli zabrania automatom, nie pobiera i zgłasza błąd; wtedy pobierz plik sam w przeglądarce i wgraj do `incoming` (instrukcja w `incoming/CZYTAJ.txt`).
-- Pobieranie tylko z domeny `nfz.gov.pl` przez `https` (także po przekierowaniach i dla linku odczytanego ze strony). Limity: strona 5 MB, plik .xlsx 25 MB, odpowiedź API Sejmu 2 MB.
-- Automat nie publikuje słownika, w którym zmieniło się więcej niż 20% nazw kodów (zmiana wymaga przeglądu): przejrzyj plik i wgraj go ręcznie do `incoming`. Plik wgrany ręcznie przez Ciebie nie podlega temu progowi. Pozostałe sprawdzenia bez zmian (min. 5000 kodów, wymagane kody, spadek liczby kodów o ponad 10% blokuje).
-- Workflow ma osobne uprawnienia dla każdego zadania (zapis do repozytorium tylko w zadaniu aktualizującym dane; publikacja Pages tylko w zadaniu publikującym) oraz przypięte wersje `openpyxl` i `defusedxml`.
-- Testy skryptów: `python3 -m unittest discover -s tests -p "test_*.py" -v` (bez internetu).
-- **Warunki ponownego wykorzystywania słownika NFZ nie zostały sprawdzone** (sekcja 8). Zalecane: zapytać NFZ o zgodę na ponowne publikowanie w nieoficjalnej aplikacji.
-
-### Świadomie NIE zmienione (wymaga decyzji właścicielki)
-- Premia +6 dla kodów diagnostycznych sprawia, że przy „terapia” kody 93.xx stoją przed „94.42 Terapia rodzin”. To zachowanie pierwotne, test pilnuje, że kolejność top 20 jest taka jak wcześniej.
-- „Badanie krwi”: kody z trafieniem tylko w nadrzędnych (np. 92.058) są dopiero za kodami z trafieniem we własnej nazwie. Kod 00.9603 ma „krwi” we własnej nazwie („elementów morfotycznych krwi”), więc jego pozycja jest zgodna z zasadami.
-
-### Znane ograniczenia i pomysły (nie wdrożone; testy wypisują je jako „info”)
-- „ekg”: 89.52 „Elektrokardiogram” jest 7., bo nazwy zawierające dosłownie „ekg” (np. „Fonokardiogram z ekg”) dostają premię +4.
-- Odmiany spoza listy w `SYN` (np. „noga”) nadal nie łączą się z „kończyną dolną”. Rozwiązanie: wiersz w `SYN`.
-- Skracanie końcówek jest agresywne dla krótkich słów: „stopy” łapie „stopnia”, „krwi” łapie „krwiotwórczego”.
-- Kody końcowe nie są ściśle przed wszystkimi kategoriami ogólnymi (np. przy „fizjoterapia” kategoria 93.39 stoi przed kodem 93.88).
