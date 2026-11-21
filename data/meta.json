@@ -4,10 +4,10 @@
   "source": "ręcznie dodany plik icd-9_pl_cm_v_5.91.xlsx",
   "updatedAt": "2026-11-16T12:22:00Z",
   "latestSeen": "5.91",
-  "checkedAt": "2026-11-20T06:24:57Z",
+  "checkedAt": "2026-11-21T06:18:33Z",
   "latestFile": "icd-9_pl_cm_v_5.91.xlsx",
   "resort": {
-    "checkedAt": "2026-11-20T06:24:58Z",
+    "checkedAt": "2026-11-21T06:18:34Z",
     "amendments": [
       "DU/2017/999"
     ],
@@ -19,7 +19,7 @@
     "version": "ICD-10-2008-PL, aktualizacja z 31.03.2021",
     "count": 12010,
     "fileDate": "2021-03-31",
-    "checkedAt": "2026-11-20T06:24:59Z",
+    "checkedAt": "2026-11-21T06:18:35Z",
     "portalNewest": "2021-03-31"
   }
 }
